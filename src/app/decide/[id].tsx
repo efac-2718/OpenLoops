@@ -9,9 +9,9 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { decideLoop, loopQuery, type LoopRow } from '@/db/loops';
+import { decideLoop, editLoop, loopQuery, type LoopRow } from '@/db/loops';
 import { revisitOptions, scheduleOptions, type QuickDate } from '@/domain/dates';
-import type { Decision, DecisionError, DecisionKind } from '@/domain/loop';
+import type { CaptureError, Decision, DecisionError, DecisionKind } from '@/domain/loop';
 import { useTheme } from '@/hooks/use-theme';
 import { describeDecision } from '@/utils/describe-loop';
 import { timeAgo } from '@/utils/time-ago';
@@ -66,7 +66,12 @@ const ERRORS: Record<DecisionError | 'not_found' | 'missing_day', string> = {
   not_found: 'This loop no longer exists.',
 };
 
-const DONE_WHEN_DECIDED = { label: 'Done', hint: 'Finished. Close the loop.' };
+const EDIT_ERRORS: Record<CaptureError | 'not_found', string> = {
+  empty_title: 'Write what the loop is about.',
+  not_found: 'This loop no longer exists.',
+};
+
+const DONE_WHEN_DECIDED ={ label: 'Done', hint: 'Finished. Close the loop.' };
 
 const shortDate = (date: Date) =>
   date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -150,16 +155,14 @@ function DecideForm({ loop }: { loop: LoopRow }) {
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets>
         <View style={styles.inner}>
-          <ThemedView type="backgroundElement" style={styles.loopCard}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {undecided
+          <LoopSummary
+            loop={loop}
+            status={
+              undecided
                 ? `Open loop · captured ${timeAgo(loop.createdAt, now)}`
-                : `Currently · ${describeDecision(loop, now)}`}
-            </ThemedText>
-            <ThemedText type="smallBold" style={styles.loopTitle} testID="decide-title">
-              {loop.title}
-            </ThemedText>
-          </ThemedView>
+                : `Currently · ${describeDecision(loop, now)}`
+            }
+          />
 
           <ThemedText type="smallBold">What&apos;s the decision?</ThemedText>
 
@@ -226,6 +229,99 @@ function DecideForm({ loop }: { loop: LoopRow }) {
           />
         </View>
       </ScrollView>
+    </ThemedView>
+  );
+}
+
+/** The loop being decided, with its notes. Edit rewords it without touching its decision. */
+function LoopSummary({ loop, status }: { loop: LoopRow; status: string }) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) return <LoopEditor loop={loop} onDone={() => setEditing(false)} />;
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.loopCard}>
+      <View style={styles.loopCardHeader}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.loopStatus}>
+          {status}
+        </ThemedText>
+        <Pressable
+          testID="edit-loop"
+          accessibilityRole="button"
+          accessibilityLabel="Edit this loop"
+          hitSlop={Spacing.three}
+          onPress={() => setEditing(true)}
+          style={({ pressed }) => pressed && styles.pressed}>
+          <ThemedText type="smallBold" themeColor="accent">
+            Edit
+          </ThemedText>
+        </Pressable>
+      </View>
+      <ThemedText type="smallBold" style={styles.loopTitle} testID="decide-title">
+        {loop.title}
+      </ThemedText>
+      {loop.notes ? (
+        <ThemedText type="small" themeColor="textSecondary" testID="decide-notes">
+          {loop.notes}
+        </ThemedText>
+      ) : null}
+    </ThemedView>
+  );
+}
+
+function LoopEditor({ loop, onDone }: { loop: LoopRow; onDone: () => void }) {
+  const theme = useTheme();
+  const [title, setTitle] = useState(loop.title);
+  const [notes, setNotes] = useState(loop.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  function save() {
+    const result = editLoop(loop.id, { title, notes });
+    if (!result.ok) {
+      setError(EDIT_ERRORS[result.error]);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.loopCard} testID="loop-editor">
+      <ThemedText type="smallBold">Edit this loop</ThemedText>
+      <TextField
+        testID="edit-title"
+        accessibilityLabel="Loop"
+        value={title}
+        onChangeText={(text) => {
+          setTitle(text);
+          setError(null);
+        }}
+        placeholder="What’s on your mind?"
+        multiline
+        autoFocus
+        style={{ backgroundColor: theme.background }}
+      />
+      <TextField
+        testID="edit-notes"
+        accessibilityLabel="Notes"
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Notes (optional): details, links, numbers"
+        multiline
+        style={{ backgroundColor: theme.background }}
+      />
+      {error ? (
+        <ThemedText type="small" themeColor="danger" testID="edit-error">
+          {error}
+        </ThemedText>
+      ) : null}
+      <View style={styles.editorButtons}>
+        <View style={styles.editorButton}>
+          <Button testID="edit-save" label="Save" onPress={save} />
+        </View>
+        <View style={styles.editorButton}>
+          <Button testID="edit-cancel" label="Cancel" variant="secondary" onPress={onDone} />
+        </View>
+      </View>
     </ThemedView>
   );
 }
@@ -310,9 +406,24 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
     gap: Spacing.one,
   },
+  loopCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  loopStatus: {
+    flex: 1,
+  },
   loopTitle: {
     fontSize: 20,
     lineHeight: 28,
+  },
+  editorButtons: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  editorButton: {
+    flex: 1,
   },
   options: {
     gap: Spacing.two,

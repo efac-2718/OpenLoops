@@ -99,8 +99,12 @@ export function toMarkdown(loops: Loop[], exportedAt: Date): string {
       .sort(section.order);
     if (inSection.length === 0) continue;
     lines.push('', `## ${section.heading} (${inSection.length})`, '');
-    // A loop captured over several lines stays one list item.
-    lines.push(...inSection.map((loop) => `- ${section.line(loop).replace(/\s*\n\s*/g, ' ')}`));
+    for (const loop of inSection) {
+      // A loop captured over several lines stays one list item.
+      lines.push(`- ${section.line(loop).replace(/\s*\n\s*/g, ' ')}`);
+      // Notes keep their lines, quoted under the item they belong to.
+      if (loop.notes) lines.push(...loop.notes.split('\n').map((note) => `  > ${note}`.trimEnd()));
+    }
   }
 
   if (lines.length === 3) lines.push('', 'Nothing here yet.');

@@ -4,6 +4,7 @@ import {
   canCloseDay,
   captureLoop,
   decide,
+  editLoop,
   needsAttention,
   type DecisionContext,
   type Loop,
@@ -42,6 +43,26 @@ describe('captureLoop', () => {
 
   test.each(['', '   ', '\n\t'])('rejects an empty title %j', (title) => {
     expect(captureLoop(title, { id: 'a', now })).toEqual({ ok: false, error: 'empty_title' });
+  });
+});
+
+describe('editLoop', () => {
+  test('trims the new title and notes', () => {
+    expect(editLoop({ title: '  Reply to the landlord about the leak ', notes: ' Flat 4B \n' }, now)).toEqual({
+      ok: true,
+      value: { title: 'Reply to the landlord about the leak', notes: 'Flat 4B', updatedAt: now },
+    });
+  });
+
+  test('blank notes are cleared', () => {
+    expect(editLoop({ title: 'Reply', notes: '  \n ' }, now)).toEqual({
+      ok: true,
+      value: { title: 'Reply', notes: null, updatedAt: now },
+    });
+  });
+
+  test.each(['', '   ', '\n\t'])('rejects an empty title %j', (title) => {
+    expect(editLoop({ title, notes: 'Something' }, now)).toEqual({ ok: false, error: 'empty_title' });
   });
 });
 

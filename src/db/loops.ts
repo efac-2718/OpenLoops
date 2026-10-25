@@ -79,6 +79,21 @@ export function captureLoop(title: string): Result<LoopRow, rules.CaptureError> 
   return result;
 }
 
+/** Rewords a loop or changes its notes, keeping its decision. */
+export function editLoop(
+  id: string,
+  changes: { title: string; notes: string },
+): Result<rules.LoopEdit, rules.CaptureError | 'not_found'> {
+  const result = rules.editLoop(changes, new Date());
+  if (!result.ok) return result;
+  const { changes: updated } = getDb()
+    .update(loops)
+    .set(result.value)
+    .where(and(eq(loops.id, id), notDeleted))
+    .run();
+  return updated > 0 ? result : { ok: false, error: 'not_found' };
+}
+
 /** Confirms during a review that a loop's decision still holds. */
 export function keepLoop(id: string): Result<Pick<LoopRow, 'reviewedAt' | 'updatedAt'>, KeepError | 'not_found'> {
   return getDb().transaction((tx) => {

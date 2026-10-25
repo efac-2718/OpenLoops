@@ -78,7 +78,7 @@ src/
     (tabs)/active.tsx  Active: scheduled, next actions, waiting on someone; quick "Done"
     (tabs)/thinking.tsx  Thinking: loops left open on purpose, with their revisit day
     (tabs)/close.tsx   Tonight: the nightly close and its reminder time
-    decide/[id].tsx    Decide: give a loop a decision, or change one
+    decide/[id].tsx    Decide: give a loop a decision or change one; edit its wording and notes
     settings.tsx       Settings: active-loop limit, export, restore from a backup, app version and updates
     review.tsx         Weekly review: a step-by-step look at every open loop
   domain/              The rules, as plain TypeScript (no React, no database)
@@ -147,7 +147,7 @@ Tap the mic on your phone's keyboard (for example Gboard) on the Capture screen 
 
 ### Your data
 
-Everything stays on the phone. **Settings → Your data** exports a copy through the system share sheet (save to Drive or Files, email it, and so on): Markdown to read, grouped by decision, or JSON with every loop, nightly close, weekly review, and setting, for backup or moving elsewhere.
+Everything stays on the phone. **Settings → Your data** exports a copy through the system share sheet (save to Drive or Files, email it, and so on): Markdown to read, grouped by decision with each loop's notes, or JSON with every loop, nightly close, weekly review, and setting, for backup or moving elsewhere.
 
 **Settings → Restore from a backup** reads a JSON backup back in, for example when moving from Expo Go to an installed build, or to a new phone. It shows what would change before changing anything, and it merges rather than replaces: loops only in the backup are added, and where both have the same loop, the one changed more recently wins. Nothing is deleted, restoring the same file twice changes nothing, and the reminder time is left alone because it needs this phone's notification permission.
 

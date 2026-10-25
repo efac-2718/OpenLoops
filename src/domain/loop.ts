@@ -126,6 +126,18 @@ export function captureLoop(
   });
 }
 
+export type LoopEdit = Pick<Loop, 'title' | 'notes' | 'updatedAt'>;
+
+/** Rewords a loop or changes its notes. Its decision stays as it is. */
+export function editLoop(
+  { title, notes }: { title: string; notes: string },
+  now: Date,
+): Result<LoopEdit, CaptureError> {
+  const trimmed = title.trim();
+  if (!trimmed) return fail('empty_title');
+  return ok({ title: trimmed, notes: notes.trim() || null, updatedAt: now });
+}
+
 export function decide(
   loop: Pick<Loop, 'state'>,
   decision: Decision,

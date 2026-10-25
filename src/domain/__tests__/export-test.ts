@@ -82,6 +82,12 @@ describe('toMarkdown', () => {
     );
   });
 
+  test('quotes notes under their loop, line by line', () => {
+    expect(
+      toMarkdown([loop('inbox', { title: 'Leak', notes: 'Flat 4B\n\nAsk for the plumber’s number' })], now),
+    ).toContain('- Leak\n  > Flat 4B\n  >\n  > Ask for the plumber’s number\n');
+  });
+
   test('leaves out deleted loops and says when there is nothing', () => {
     expect(toMarkdown([loop('inbox', { deletedAt: day(24) })], now)).toBe(
       '# Open Loops\n\nExported 2026-10-25.\n\nNothing here yet.\n',

@@ -1,4 +1,4 @@
-import { addDays, revisitOptions, scheduleOptions, startOfDay } from '../dates';
+import { addDays, dayKey, revisitOptions, scheduleOptions, startOfDay } from '../dates';
 
 const labelled = (options: { label: string; date: Date }[]) =>
   options.map(({ label, date }) => [label, date.toDateString()]);
@@ -10,6 +10,13 @@ describe('startOfDay / addDays', () => {
 
   test('rolls over month ends at local midnight', () => {
     expect(addDays(new Date(2026, 9, 31, 18), 1)).toEqual(new Date(2026, 10, 1));
+  });
+});
+
+describe('dayKey', () => {
+  test('is the local calendar day, zero-padded', () => {
+    expect(dayKey(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05');
+    expect(dayKey(new Date(2026, 9, 28, 0, 0))).toBe('2026-10-28');
   });
 });
 

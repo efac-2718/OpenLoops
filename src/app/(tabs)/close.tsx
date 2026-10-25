@@ -1,0 +1,206 @@
+import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Button } from '@/components/button';
+import { Chip } from '@/components/chip';
+import { CardAction, LoopCard } from '@/components/loop-card';
+import { ScreenHeader } from '@/components/screen-header';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { closeDay, todayCloseQuery } from '@/db/closes';
+import { closeCandidatesQuery, type LoopRow } from '@/db/loops';
+import { setSetting } from '@/db/settings';
+import { dayKey } from '@/domain/dates';
+import { attentionReason, type AttentionReason } from '@/domain/loop';
+import {
+  CLOSE_TIME_OPTIONS,
+  formatCloseTime,
+  sameCloseTime,
+  type CloseTime,
+} from '@/domain/reminder';
+import { useCloseTime } from '@/hooks/use-settings';
+import { setCloseReminder, type ReminderResult } from '@/services/close-reminder';
+import { formatDayInline } from '@/utils/describe-loop';
+import { loopCount, loopsNeed } from '@/utils/plural';
+
+// Most pressing first: things already late, then today's, then undecided, then rethinks.
+const REASON_ORDER: AttentionReason[] = ['overdue', 'due_today', 'undecided', 'revisit'];
+
+export default function CloseScreen() {
+  const now = new Date();
+  const { data: candidates } = useLiveQuery(closeCandidatesQuery());
+  const { data: closes } = useLiveQuery(todayCloseQuery(now), [dayKey(now)]);
+  const closedToday = closes[0];
+
+  const attention = candidates
+    .map((loop) => ({ loop, reason: attentionReason(loop, now) }))
+    .filter((item): item is { loop: LoopRow; reason: AttentionReason } => item.reason !== null)
+    .sort((a, b) => REASON_ORDER.indexOf(a.reason) - REASON_ORDER.indexOf(b.reason));
+
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+          <ScreenHeader title="Close the day" style={styles.header}>
+            {attention.length > 0
+              ? `${loopsNeed(attention.length)} a decision before bed. Give each one a home, then close the day.`
+              : 'Before bed, make sure everything on your mind has a home.'}
+          </ScreenHeader>
+
+          {attention.length > 0 ? (
+            <View style={styles.list}>
+              {closedToday ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  You closed the day earlier, and new loops have come in since.
+                </ThemedText>
+              ) : null}
+              {attention.map(({ loop, reason }, index) => (
+                <LoopCard
+                  key={loop.id}
+                  testID={`close-row-${index}`}
+                  title={loop.state === 'scheduled' ? (loop.nextAction ?? loop.title) : loop.title}
+                  detail={describeReason(loop, reason, now)}
+                  detailColor={reason === 'overdue' ? 'danger' : undefined}
+                  onPress={() => router.push({ pathname: '/decide/[id]', params: { id: loop.id } })}
+                  action={<CardAction label="Decide" />}
+                />
+              ))}
+            </View>
+          ) : closedToday ? (
+            <ThemedView type="backgroundElement" style={styles.card} testID="close-done">
+              <ThemedText type="smallBold">Day closed</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Everything has a home.{' '}
+                {closedToday.resolvedCount > 0
+                  ? `You gave ${loopCount(closedToday.resolvedCount)} a decision today. `
+                  : ''}
+                Sleep well.
+              </ThemedText>
+            </ThemedView>
+          ) : (
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="smallBold">Everything has a home</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Every open loop has a next step, a day, a person, or a conscious no. Nothing needs
+                holding in your head tonight.
+              </ThemedText>
+              <Button testID="close-day" label="Close the day" onPress={() => closeDay(new Date())} />
+            </ThemedView>
+          )}
+
+          <ReminderSettings />
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+function describeReason(loop: LoopRow, reason: AttentionReason, now: Date): string {
+  switch (reason) {
+    case 'undecided':
+      return 'In your inbox';
+    case 'due_today':
+      return `Planned for today · ${loop.title}`;
+    case 'overdue':
+      return `Overdue since ${loop.dueAt ? formatDayInline(loop.dueAt, now) : 'earlier'} · ${loop.title}`;
+    case 'revisit':
+      return 'Time to revisit';
+  }
+}
+
+const formatTime = ({ hour, minute }: CloseTime) =>
+  new Date(2000, 0, 1, hour, minute).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+function ReminderSettings() {
+  const closeTime = useCloseTime();
+  const [result, setResult] = useState<ReminderResult | null>(null);
+
+  async function choose(time: CloseTime | null) {
+    const outcome = await setCloseReminder(time);
+    // Without permission there is no reminder, so keep the old setting.
+    if (outcome !== 'denied') setSetting('close_time', time ? formatCloseTime(time) : 'off');
+    setResult(outcome);
+  }
+
+  let status: string;
+  if (result === 'denied') {
+    status =
+      'Notifications are turned off for Open Loops. Turn them on in your phone’s Settings, then pick a time again.';
+  } else if (result === 'unsupported') {
+    status = 'Reminders work in the phone app.';
+  } else if (closeTime) {
+    status = `Every night at ${formatTime(closeTime)}.`;
+  } else {
+    status = 'Pick a time and Open Loops will remind you to close the day.';
+  }
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.card}>
+      <ThemedText type="smallBold">Nightly reminder</ThemedText>
+      <View style={styles.chips} accessibilityRole="radiogroup">
+        {CLOSE_TIME_OPTIONS.map((time, index) => (
+          <Chip
+            key={formatCloseTime(time)}
+            testID={`reminder-${index}`}
+            label={formatTime(time)}
+            selected={sameCloseTime(time, closeTime)}
+            onPress={() => choose(time)}
+          />
+        ))}
+        <Chip
+          testID="reminder-off"
+          label="Off"
+          selected={closeTime === null}
+          onPress={() => choose(null)}
+        />
+      </View>
+      <ThemedText type="small" themeColor="textSecondary" testID="reminder-status">
+        {status}
+      </ThemedText>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  scroll: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+  },
+  content: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.five,
+    paddingBottom: BottomTabInset + Spacing.four,
+    gap: Spacing.four,
+  },
+  header: {
+    // The scroll content's gap already spaces the header from what follows.
+    marginBottom: 0,
+  },
+  list: {
+    gap: Spacing.two,
+  },
+  card: {
+    padding: Spacing.four,
+    borderRadius: Spacing.three,
+    gap: Spacing.two,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+});

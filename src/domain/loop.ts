@@ -165,22 +165,39 @@ export function decide(
   }
 }
 
+export type AttentionReason = 'undecided' | 'due_today' | 'overdue' | 'revisit';
+
 /**
- * Whether tonight's close should ask about this loop: it is still undecided,
- * its scheduled day has come, or it is time to revisit something left open on purpose.
+ * Why tonight's close should ask about this loop, or null if it already has a
+ * home: it is still undecided, its scheduled day has come or passed, or it is
+ * time to revisit something left open on purpose.
  */
-export function needsAttention(loop: Loop, now: Date): boolean {
-  if (loop.deletedAt) return false;
-  const tomorrow = addDays(startOfDay(now), 1);
+export function attentionReason(
+  loop: Pick<Loop, 'state' | 'dueAt' | 'revisitAt' | 'deletedAt'>,
+  now: Date,
+): AttentionReason | null {
+  if (loop.deletedAt) return null;
+  const today = startOfDay(now);
+  const tomorrow = addDays(today, 1);
 
   switch (loop.state) {
     case 'inbox':
-      return true;
+      return 'undecided';
     case 'scheduled':
-      return loop.dueAt !== null && loop.dueAt < tomorrow;
+      if (loop.dueAt === null || loop.dueAt >= tomorrow) return null;
+      return loop.dueAt < today ? 'overdue' : 'due_today';
     case 'thinking':
-      return loop.revisitAt !== null && loop.revisitAt < tomorrow;
+      return loop.revisitAt !== null && loop.revisitAt < tomorrow ? 'revisit' : null;
     default:
-      return false;
+      return null;
   }
+}
+
+export function needsAttention(loop: Loop, now: Date): boolean {
+  return attentionReason(loop, now) !== null;
+}
+
+/** The day can be closed once every loop has a home. */
+export function canCloseDay(loops: Loop[], now: Date): boolean {
+  return loops.every((loop) => !needsAttention(loop, now));
 }

@@ -9,10 +9,11 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { decideLoop, loopQuery } from '@/db/loops';
+import { decideLoop, loopQuery, type LoopRow } from '@/db/loops';
 import { revisitOptions, scheduleOptions, type QuickDate } from '@/domain/dates';
 import type { Decision, DecisionError, DecisionKind } from '@/domain/loop';
 import { useTheme } from '@/hooks/use-theme';
+import { describeDecision } from '@/utils/describe-loop';
 import { timeAgo } from '@/utils/time-ago';
 
 const OPTIONS: { kind: DecisionKind; label: string; hint: string; confirm: string }[] = [
@@ -65,7 +66,9 @@ const ERRORS: Record<DecisionError | 'not_found' | 'missing_day', string> = {
   not_found: 'This loop no longer exists.',
 };
 
-const formatDay = (date: Date) =>
+const DONE_WHEN_DECIDED = { label: 'Done', hint: 'Finished. Close the loop.' };
+
+const shortDate = (date: Date) =>
   date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 export default function DecideScreen() {
@@ -73,17 +76,26 @@ export default function DecideScreen() {
   const { data } = useLiveQuery(loopQuery(id), [id]);
   const loop = data[0];
 
+  if (!loop) return <ThemedView style={styles.container} />;
+  // Keyed so the form starts fresh from the loop it is showing.
+  return <DecideForm key={loop.id} loop={loop} />;
+}
+
+function DecideForm({ loop }: { loop: LoopRow }) {
   const [now] = useState(() => new Date());
   const [kind, setKind] = useState<DecisionKind | null>(null);
-  const [nextAction, setNextAction] = useState('');
-  const [waitingOn, setWaitingOn] = useState('');
+  // Text carries over when changing a decision, e.g. rescheduling keeps the next action.
+  const [nextAction, setNextAction] = useState(loop.nextAction ?? '');
+  const [waitingOn, setWaitingOn] = useState(loop.waitingOn ?? '');
   const [dueAt, setDueAt] = useState<Date | null>(null);
   const [revisitAt, setRevisitAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!loop) return <ThemedView style={styles.container} />;
-
-  const selected = OPTIONS.find((option) => option.kind === kind);
+  const undecided = loop.state === 'inbox';
+  const options = undecided
+    ? OPTIONS
+    : OPTIONS.map((option) => (option.kind === 'done' ? { ...option, ...DONE_WHEN_DECIDED } : option));
+  const selected = options.find((option) => option.kind === kind);
 
   function choose(next: DecisionKind) {
     setKind(next);
@@ -140,7 +152,9 @@ export default function DecideScreen() {
         <View style={styles.inner}>
           <ThemedView type="backgroundElement" style={styles.loopCard}>
             <ThemedText type="small" themeColor="textSecondary">
-              Open loop · captured {timeAgo(loop.createdAt, now)}
+              {undecided
+                ? `Open loop · captured ${timeAgo(loop.createdAt, now)}`
+                : `Currently · ${describeDecision(loop, now)}`}
             </ThemedText>
             <ThemedText type="smallBold" style={styles.loopTitle} testID="decide-title">
               {loop.title}
@@ -150,7 +164,7 @@ export default function DecideScreen() {
           <ThemedText type="smallBold">What&apos;s the decision?</ThemedText>
 
           <View style={styles.options} accessibilityRole="radiogroup">
-            {OPTIONS.map((option) => (
+            {options.map((option) => (
               <OptionCard
                 key={option.kind}
                 label={option.label}
@@ -269,7 +283,7 @@ function DayPicker({ options, value, onChange, testIDPrefix }: DayPickerProps) {
           key={option.label}
           testID={`${testIDPrefix}-${index}`}
           label={option.label}
-          detail={formatDay(option.date)}
+          detail={shortDate(option.date)}
           selected={value?.getTime() === option.date.getTime()}
           onPress={() => onChange(option.date)}
         />

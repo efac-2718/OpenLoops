@@ -1,5 +1,7 @@
 import { addDays } from '../dates';
 import {
+  attentionReason,
+  canCloseDay,
   captureLoop,
   decide,
   needsAttention,
@@ -211,5 +213,33 @@ describe('needsAttention (nightly close)', () => {
 
   test('ignores deleted loops', () => {
     expect(needsAttention(makeLoop('inbox', { deletedAt: yesterday }), now)).toBe(false);
+  });
+});
+
+describe('attentionReason', () => {
+  test('names why the close is asking', () => {
+    expect(attentionReason(makeLoop('inbox'), now)).toBe('undecided');
+    expect(attentionReason(makeLoop('scheduled', { dueAt: today }), now)).toBe('due_today');
+    expect(attentionReason(makeLoop('scheduled', { dueAt: yesterday }), now)).toBe('overdue');
+    expect(attentionReason(makeLoop('thinking', { revisitAt: yesterday }), now)).toBe('revisit');
+    expect(attentionReason(makeLoop('scheduled', { dueAt: tomorrow }), now)).toBeNull();
+  });
+});
+
+describe('canCloseDay', () => {
+  test('is true once every loop has a home', () => {
+    const settled = [
+      makeLoop('next', { nextAction: 'Email Sam' }),
+      makeLoop('scheduled', { dueAt: tomorrow }),
+      makeLoop('thinking', { revisitAt: tomorrow }),
+      makeLoop('done'),
+    ];
+    expect(canCloseDay(settled, now)).toBe(true);
+    expect(canCloseDay([], now)).toBe(true);
+  });
+
+  test('is false while anything still needs a decision', () => {
+    expect(canCloseDay([makeLoop('next'), makeLoop('inbox')], now)).toBe(false);
+    expect(canCloseDay([makeLoop('scheduled', { dueAt: today })], now)).toBe(false);
   });
 });

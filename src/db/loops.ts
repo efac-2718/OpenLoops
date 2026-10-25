@@ -34,6 +34,34 @@ export function inboxCountQuery() {
     .where(and(eq(loops.state, 'inbox'), notDeleted));
 }
 
+export function activeQuery() {
+  return getDb()
+    .select()
+    .from(loops)
+    .where(and(inArray(loops.state, [...rules.ACTIVE_STATES]), notDeleted))
+    .orderBy(asc(loops.dueAt), asc(loops.updatedAt));
+}
+
+export function thinkingQuery() {
+  return getDb()
+    .select()
+    .from(loops)
+    .where(and(eq(loops.state, 'thinking'), notDeleted))
+    .orderBy(asc(loops.revisitAt), asc(loops.updatedAt));
+}
+
+/** The only states that can need attention at the nightly close (see rules.attentionReason). */
+export const CLOSE_CANDIDATE_STATES = ['inbox', 'scheduled', 'thinking'] as const;
+
+/** Loops that might need attention tonight. Screens narrow them with rules.attentionReason. */
+export function closeCandidatesQuery() {
+  return getDb()
+    .select()
+    .from(loops)
+    .where(and(inArray(loops.state, [...CLOSE_CANDIDATE_STATES]), notDeleted))
+    .orderBy(asc(loops.createdAt));
+}
+
 export function loopQuery(id: string) {
   return getDb()
     .select()

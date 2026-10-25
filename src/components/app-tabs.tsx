@@ -24,6 +24,21 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Icon sf="tray" md="inbox" />
         <NativeTabs.Trigger.Badge hidden={inboxCount === 0}>{String(inboxCount)}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="active">
+        <NativeTabs.Trigger.Label>Active</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="thinking">
+        <NativeTabs.Trigger.Label>Thinking</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="lightbulb" md="lightbulb" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="close">
+        <NativeTabs.Trigger.Label>Tonight</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="moon.stars" md="bedtime" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

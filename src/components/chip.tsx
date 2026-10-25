@@ -21,7 +21,8 @@ export function Chip({ label, detail, selected, ...rest }: ChipProps) {
       style={({ pressed }) => [
         styles.chip,
         {
-          backgroundColor: selected ? theme.accent : theme.backgroundElement,
+          // The page background stands out on any card a chip sits on.
+          backgroundColor: selected ? theme.accent : theme.background,
         },
         pressed && styles.pressed,
       ]}

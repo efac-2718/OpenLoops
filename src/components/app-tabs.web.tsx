@@ -26,7 +26,16 @@ export default function AppTabs() {
             <TabButton>Capture</TabButton>
           </TabTrigger>
           <TabTrigger name="inbox" href="/inbox" asChild>
-            <TabButton>{inboxCount > 0 ? `Inbox (${inboxCount})` : 'Inbox'}</TabButton>
+            <TabButton>{inboxCount > 0 ? `Inbox ${inboxCount}` : 'Inbox'}</TabButton>
+          </TabTrigger>
+          <TabTrigger name="active" href="/active" asChild>
+            <TabButton>Active</TabButton>
+          </TabTrigger>
+          <TabTrigger name="thinking" href="/thinking" asChild>
+            <TabButton>Thinking</TabButton>
+          </TabTrigger>
+          <TabTrigger name="close" href="/close" asChild>
+            <TabButton>Tonight</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -52,10 +61,6 @@ export function CustomTabList(props: TabListProps) {
   return (
     <View {...props} style={styles.tabListContainer}>
       <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Open Loops
-        </ThemedText>
-
         {props.children}
       </ThemedView>
     </View>
@@ -74,23 +79,21 @@ const styles = StyleSheet.create({
   },
   innerContainer: {
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.two,
     borderRadius: Spacing.five,
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     flexGrow: 1,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
-  },
-  brandText: {
-    marginRight: 'auto',
   },
   pressed: {
     opacity: 0.7,
   },
   tabButtonView: {
     paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.two,
     borderRadius: Spacing.three,
   },
 });

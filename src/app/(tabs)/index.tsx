@@ -1,13 +1,6 @@
 import { Link, router } from 'expo-router';
 import { useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-  type TextInputInstance,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, type TextInputInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -15,7 +8,8 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { captureLoop } from '@/db/loops';
+import { captureLoop, captureLoops } from '@/db/loops';
+import { splitBrainDump } from '@/domain/brain-dump';
 import { useInboxCount } from '@/hooks/use-inbox-count';
 import { loopCount } from '@/utils/plural';
 
@@ -25,10 +19,20 @@ export default function CaptureScreen() {
   const [lastCaptured, setLastCaptured] = useState<string | null>(null);
   const inputRef = useRef<TextInputInstance>(null);
 
-  function capture() {
-    const result = captureLoop(text);
-    if (!result.ok) return;
-    setLastCaptured(result.value.title);
+  // More than one sentence or line reads as a brain dump: offer one loop per thought.
+  const thoughts = splitBrainDump(text);
+  const isBrainDump = thoughts.length > 1;
+
+  function capture({ asOne = false } = {}) {
+    if (isBrainDump && !asOne) {
+      const result = captureLoops(thoughts);
+      if (!result.ok) return;
+      setLastCaptured(loopCount(result.value.length));
+    } else {
+      const result = captureLoop(text);
+      if (!result.ok) return;
+      setLastCaptured(`“${result.value.title}”`);
+    }
     setText('');
     // Stay ready for the next thought: brain dumps come in bursts.
     inputRef.current?.focus();
@@ -37,9 +41,11 @@ export default function CaptureScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.content}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets>
           <View style={styles.topBar}>
             <Pressable
               testID="open-settings"
@@ -62,25 +68,54 @@ export default function CaptureScreen() {
             testID="capture-input"
             value={text}
             onChangeText={setText}
-            onSubmitEditing={capture}
+            onSubmitEditing={() => capture()}
             submitBehavior="submit"
+            // react-native-web only reads blurOnSubmit; on phones submitBehavior overrides it.
+            blurOnSubmit
             returnKeyType="done"
             placeholder="Reply to the landlord about the leak"
             multiline
             autoFocus
             style={styles.input}
           />
+
+          {isBrainDump ? (
+            <ThemedView type="backgroundElement" style={styles.card} testID="brain-dump-preview">
+              <ThemedText type="smallBold">That&apos;s {thoughts.length} separate thoughts:</ThemedText>
+              {thoughts.map((thought, index) => (
+                <ThemedText key={index} type="small" testID={`brain-dump-item-${index}`}>
+                  {index + 1}. {thought}
+                </ThemedText>
+              ))}
+            </ThemedView>
+          ) : null}
+
           <Button
             testID="capture-submit"
-            label="Add to inbox"
-            onPress={capture}
+            label={isBrainDump ? `Add ${thoughts.length} loops` : 'Add to inbox'}
+            onPress={() => capture()}
             disabled={!text.trim()}
           />
+          {isBrainDump ? (
+            <Button
+              testID="capture-as-one"
+              label="Add as one loop"
+              variant="secondary"
+              onPress={() => capture({ asOne: true })}
+            />
+          ) : null}
+
+          {!text && !lastCaptured ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Tip: tap the mic on your keyboard and say everything at once. Each sentence becomes
+              its own loop.
+            </ThemedText>
+          ) : null}
 
           {lastCaptured ? (
-            <ThemedView type="backgroundElement" style={styles.confirmation}>
+            <ThemedView type="backgroundElement" style={styles.card}>
               <ThemedText type="small" testID="capture-confirmation">
-                Captured “{lastCaptured}”
+                Captured {lastCaptured}
               </ThemedText>
               <Link href="/inbox">
                 <ThemedText type="linkPrimary">
@@ -95,7 +130,7 @@ export default function CaptureScreen() {
               </ThemedText>
             </Link>
           ) : null}
-        </KeyboardAvoidingView>
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -107,14 +142,16 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.three,
     alignItems: 'center',
   },
-  content: {
+  scroll: {
     width: '100%',
     maxWidth: MaxContentWidth,
+  },
+  content: {
+    paddingHorizontal: Spacing.four,
     paddingTop: Spacing.three,
+    paddingBottom: BottomTabInset + Spacing.three,
     gap: Spacing.three,
   },
   topBar: {
@@ -128,7 +165,7 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: 'top',
   },
-  confirmation: {
+  card: {
     padding: Spacing.three,
     borderRadius: Spacing.three,
     gap: Spacing.one,

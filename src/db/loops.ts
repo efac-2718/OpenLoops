@@ -78,6 +78,22 @@ export function captureLoop(title: string): Result<LoopRow, rules.CaptureError> 
   return result;
 }
 
+/** Captures several thoughts at once, all or none, in the order given. */
+export function captureLoops(titles: string[]): Result<LoopRow[], rules.CaptureError> {
+  const now = Date.now();
+  const captured: LoopRow[] = [];
+  for (const [index, title] of titles.entries()) {
+    // A millisecond apart, so the inbox (oldest first) keeps the order they were said in.
+    const result = rules.captureLoop(title, { id: randomUUID(), now: new Date(now + index) });
+    if (!result.ok) return result;
+    captured.push(result.value);
+  }
+  if (captured.length > 0) {
+    getDb().insert(loops).values(captured).run();
+  }
+  return { ok: true, value: captured };
+}
+
 export function decideLoop(
   id: string,
   decision: Decision,

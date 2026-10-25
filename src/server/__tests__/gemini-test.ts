@@ -1,6 +1,6 @@
 import type { SortRequest } from '@/domain/ai-sort';
 
-import { suggestWithGemini } from '../gemini';
+import { GEMINI_MODELS, suggestWithGemini } from '../gemini';
 import { SUGGESTIONS_SCHEMA, SYSTEM_PROMPT } from '../sort-prompt';
 
 const request: SortRequest = {
@@ -24,13 +24,16 @@ function answer(fields: Record<string, unknown> = {}) {
       },
     ],
     usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 200 },
-    modelVersion: 'gemini-flash',
     ...fields,
   };
 }
 
+const OVERLOADED = { error: { message: 'This model is currently experiencing high demand.' } };
+
 const mockFetch = jest.fn();
-const reply = (status: number, body: unknown) => mockFetch.mockResolvedValue({ status, json: async () => body });
+const respond = (status: number, body: unknown) => ({ status, json: async () => body });
+const modelsAsked = () =>
+  mockFetch.mock.calls.map(([url]: [string]) => /models\/(.+):generateContent/.exec(url)?.[1]);
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -39,17 +42,22 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-test('asks Gemini Flash for JSON matching the suggestions schema, and reads the answer', async () => {
-  reply(200, answer());
+test('asks the first model for JSON matching the suggestions schema, and reads its answer', async () => {
+  mockFetch.mockResolvedValue(respond(200, answer()));
 
   await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
+  expect(modelsAsked()).toEqual([GEMINI_MODELS[0]]);
   const [url, init] = mockFetch.mock.calls[0];
-  expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent');
+  expect(url).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELS[0]}:generateContent`);
   expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'x-goog-api-key': 'key' });
   expect(JSON.parse(init.body)).toEqual({
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text: JSON.stringify(request) }] }],
-    generationConfig: { responseMimeType: 'application/json', responseJsonSchema: SUGGESTIONS_SCHEMA },
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseJsonSchema: SUGGESTIONS_SCHEMA,
+      maxOutputTokens: 8192,
+    },
   });
 });
 
@@ -59,44 +67,53 @@ test('needs an API key', async () => {
 });
 
 test.each([
-  ['a safety stop', answer({ candidates: [{ finishReason: 'SAFETY' }] }), 'refused'],
-  ['a blocked prompt', answer({ candidates: [], promptFeedback: { blockReason: 'OTHER' } }), 'refused'],
-  ['running out of tokens', answer({ candidates: [{ finishReason: 'MAX_TOKENS' }] }), 'failed'],
-  ['text that is not JSON', answer({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'Sure!' }] } }] }), 'failed'],
-])('reports %s', async (_, body, error) => {
-  reply(200, body);
-  await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
+  ['overloaded', respond(503, OVERLOADED)],
+  ['out of its free quota', respond(429, { error: { message: 'Quota exceeded' } })],
+  ['not offered', respond(404, { error: { message: 'Model not found' } })],
+  ['cut short', respond(200, answer({ candidates: [{ finishReason: 'MAX_TOKENS' }] }))],
+  ['unreadable', respond(200, answer({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{' }] } }] }))],
+])('asks the next model when one is %s', async (_, firstReply) => {
+  mockFetch.mockResolvedValueOnce(firstReply).mockResolvedValueOnce(respond(200, answer()));
+
+  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
+  expect(modelsAsked()).toEqual(GEMINI_MODELS.slice(0, 2));
+});
+
+test('asks the next model when one doesn’t answer in 25 seconds', async () => {
+  jest.useFakeTimers();
+  mockFetch
+    .mockImplementationOnce(
+      (_url: string, init: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted')))),
+    )
+    .mockResolvedValueOnce(respond(200, answer()));
+
+  const result = suggestWithGemini(request, 'key');
+  await jest.advanceTimersByTimeAsync(25_000);
+  await expect(result).resolves.toEqual({ ok: true, value: { suggestions } });
+  jest.useRealTimers();
+});
+
+test('says it is busy when every model is unavailable, and which', async () => {
+  mockFetch.mockResolvedValue(respond(503, OVERLOADED));
+
+  const result = await suggestWithGemini(request, 'key');
+  expect(modelsAsked()).toEqual(GEMINI_MODELS);
+  expect(result).toMatchObject({ ok: false, error: 'busy' });
+  expect(!result.ok && result.detail).toContain(`${GEMINI_MODELS[0]} 503: This model is currently experiencing high demand.`);
 });
 
 test.each([
-  ['a wrong key', 400, 'API key not valid. Please pass a valid API key.', 'not_configured'],
-  ['a rejected key', 403, 'Permission denied', 'not_configured'],
-  ['the free tier limit', 429, 'Resource has been exhausted', 'busy'],
-  ['a bad request', 400, 'Invalid JSON schema', 'failed'],
-  ['a server error', 503, 'The model is overloaded', 'failed'],
-])('reports %s', async (_, status, message, error) => {
-  reply(status, { error: { message } });
-  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({
-    ok: false,
-    error,
-    detail: `Gemini ${status}: ${message}`,
-  });
-});
+  ['a wrong key', respond(400, { error: { message: 'API key not valid. Please pass a valid API key.' } }), 'not_configured'],
+  ['a rejected key', respond(403, { error: { message: 'Permission denied' } }), 'not_configured'],
+  ['a bad request', respond(400, { error: { message: 'Invalid JSON schema' } }), 'failed'],
+  ['a safety stop', respond(200, answer({ candidates: [{ finishReason: 'SAFETY' }] })), 'refused'],
+  ['a blocked prompt', respond(200, answer({ candidates: [], promptFeedback: { blockReason: 'OTHER' } })), 'refused'],
+])('stops at %s, since another model wouldn’t help', async (_, reply, error) => {
+  mockFetch.mockResolvedValue(reply);
 
-test('gives up after 45 seconds instead of hanging', async () => {
-  jest.useFakeTimers();
-  mockFetch.mockImplementation(
-    (_url: string, init: { signal: AbortSignal }) =>
-      new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted')))),
-  );
-  const result = suggestWithGemini(request, 'key');
-  await jest.advanceTimersByTimeAsync(45_000);
-  await expect(result).resolves.toEqual({
-    ok: false,
-    error: 'busy',
-    detail: 'Gemini didn’t answer within 45 seconds.',
-  });
-  jest.useRealTimers();
+  await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
+  expect(mockFetch).toHaveBeenCalledTimes(1);
 });
 
 test('describes a network failure, without the key', async () => {

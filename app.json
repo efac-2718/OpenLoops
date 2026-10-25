@@ -8,7 +8,8 @@
     "scheme": "openloops",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.efac2781.openloops"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.efac2781.openloops"
     },
     "web": {
       "output": "single",
@@ -44,6 +46,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "efac_2781",
+    "extra": {
+      "eas": {
+        "projectId": "8663987e-85ea-4f54-b50a-4ba07ca676ab"
+      }
     }
   }
 }

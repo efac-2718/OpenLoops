@@ -6,7 +6,7 @@ import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { AI_SERVER_ORIGIN } from '@/constants/ai';
+import { AI_SERVER_ORIGIN, AI_SERVICE } from '@/constants/ai';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { readExportData } from '@/db/export';
 import { applyRestore, previewRestore, type RestoreSummary } from '@/db/restore';
@@ -86,14 +86,19 @@ function AiSuggestions() {
     <ThemedView type="backgroundElement" style={styles.card}>
       <ThemedText type="smallBold">AI suggestions</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Get a suggested decision for each loop in your inbox from Claude, Anthropic’s AI. You
-        still accept or change every one.
+        Get a suggested decision for each loop in your inbox from {AI_SERVICE.name},{' '}
+        {AI_SERVICE.company}’s AI. You still accept or change every one.
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         Only when you tap Suggest decisions, the wording and notes of up to{' '}
-        {MAX_LOOPS_PER_SORT} inbox loops are sent through this app’s server to Anthropic. The
-        server doesn’t store them. Nothing else leaves your phone.
+        {MAX_LOOPS_PER_SORT} inbox loops are sent through this app’s server to{' '}
+        {AI_SERVICE.company}. The server doesn’t store them. Nothing else leaves your phone.
       </ThemedText>
+      {AI_SERVICE.dataUse ? (
+        <ThemedText type="small" themeColor="textSecondary" testID="ai-data-use">
+          {AI_SERVICE.dataUse} Keep anything private out of the inbox when you ask.
+        </ThemedText>
+      ) : null}
       <Button
         testID="ai-toggle"
         label={enabled ? 'Turn off AI suggestions' : 'Turn on AI suggestions'}

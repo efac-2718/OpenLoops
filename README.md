@@ -111,7 +111,9 @@ src/
     app-updates.ts     Which version is running, and checking for an over-the-air update
     ai-sort.ts         Calls the AI server
   server/
-    suggest-decisions.ts  Server-only: the prompt and the Claude request behind /api/sort
+    suggest-decisions.ts  Server-only: picks the AI service (AI_PROVIDER) behind /api/sort
+    sort-prompt.ts     What every AI service is asked, and the answer's JSON schema
+    gemini.ts, claude.ts  The two services' requests
   widgets/
     loops-widget.tsx   The Android home-screen widget's layout (runs in the widget's own runtime)
   components/, hooks/, utils/, constants/
@@ -154,18 +156,21 @@ Tap the mic on your phone's keyboard (for example Gboard) on the Capture screen 
 
 ### AI suggestions
 
-Turn on **Settings → AI suggestions** and the Inbox gets **Suggest decisions**: Claude suggests a decision for each loop, with the next action, day, or person filled in and a one-line reason. **Accept** applies it as it is; tapping the loop opens Decide with the suggestion filled in, to change anything first. Nothing is decided without a tap, and the usual rules still apply (a suggestion that would go over the active-loop limit can't be accepted). Suggestions are kept in memory until the app closes, and one stops being offered once its loop is edited.
+Turn on **Settings → AI suggestions** and the Inbox gets **Suggest decisions**: the AI suggests a decision for each loop, with the next action, day, or person filled in and a one-line reason. **Accept** applies it as it is; tapping the loop opens Decide with the suggestion filled in, to change anything first. Nothing is decided without a tap, and the usual rules still apply (a suggestion that would go over the active-loop limit can't be accepted). Suggestions are kept in memory until the app closes, and one stops being offered once its loop is edited.
 
 How it works:
 
 - The app sends up to 25 inbox loops (wording, notes, the day they were captured), today's date, and the active-loop numbers to `POST /api/sort` (`src/app/api/sort+api.ts`). Nothing is sent until you tap **Suggest decisions**, and the setting is per phone: a restore never turns it on.
-- The endpoint checks the request (`validateSortRequest`) and asks Claude Opus 5.5 (`claude-opus-5-5`, low effort) for one suggestion per loop as JSON matching a schema. If Claude's safety checks decline, the request falls back to Anthropic's recommended model (`fallbacks: "default"`). The server logs only counts, never the loops.
+- The endpoint checks the request (`validateSortRequest`) and asks the AI service for one suggestion per loop, as JSON matching a schema (`src/server/sort-prompt.ts`). The server logs only counts, never the loops.
+- Which service is set by `AI_PROVIDER` in `src/constants/ai.ts`, read by both the app (for its wording and privacy note) and the server:
+  - `gemini` (now): Google's `gemini-flash-latest` on the Gemini API's free tier (`src/server/gemini.ts`, using the SDK's fetch-only web build). On the free tier, Google may use what's sent to improve its products and its reviewers may read it; the Settings card says so. The free tier also has per-minute and daily limits; hitting one shows "busy".
+  - `claude`: Anthropic's Claude Opus 5.5 (`claude-opus-5-5`, low effort, `src/server/claude.ts`). If Claude's safety checks decline, the request falls back to Anthropic's recommended model (`fallbacks: "default"`).
 - The app checks every suggestion (`parseSuggestions`) and drops anything that wouldn't be a valid decision, such as a day in the past or a next action with no action.
-- The API key lives only on the server, as the `ANTHROPIC_API_KEY` EAS environment variable (production environment, **Sensitive** visibility; EAS Hosting can't use Secret variables). The app's bundle never contains it.
+- The API key lives only on the server, as an EAS environment variable in the production environment with **Sensitive** visibility (EAS Hosting can't use Secret variables): `GEMINI_API_KEY` (from Google AI Studio) or `ANTHROPIC_API_KEY` (from the Anthropic Console). The app's bundle never contains either.
 - `.eas/workflows/deploy-api.yml` deploys the endpoint to EAS Hosting on every push to `main`. `app.config.js` switches `web.output` to `server` for that export only, so the app's fingerprint runtime version doesn't change and the feature can ship as an over-the-air update.
 - `src/constants/ai.ts` holds the server's address. AI suggestions stay hidden until it's set.
 
-A sort of 20 loops costs a few US cents at Opus 5.5 prices. Set a monthly spend limit in the Anthropic Console.
+To switch to Claude: add `ANTHROPIC_API_KEY` as above, set `AI_PROVIDER` to `'claude'`, and push to `main`. That redeploys the server and sends the app an update. With Claude, a sort of 20 loops costs a few US cents; set a monthly spend limit in the Anthropic Console.
 
 ### Your data
 

@@ -1,7 +1,7 @@
-import { POST } from '@/app/api/sort+api';
 import type { SortRequest } from '@/domain/ai-sort';
 
-import { SUGGESTIONS_SCHEMA, suggestDecisions } from '../suggest-decisions';
+import { suggestWithClaude } from '../claude';
+import { SUGGESTIONS_SCHEMA } from '../sort-prompt';
 
 const mockCreate = jest.fn();
 
@@ -53,11 +53,11 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-describe('suggestDecisions', () => {
+describe('suggestWithClaude', () => {
   test('asks Claude Opus 5.5 for schema-shaped suggestions, with refusal fallback', async () => {
     mockCreate.mockResolvedValue(reply());
 
-    await expect(suggestDecisions(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
+    await expect(suggestWithClaude(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-opus-5-5',
@@ -70,7 +70,7 @@ describe('suggestDecisions', () => {
   });
 
   test('needs an API key', async () => {
-    await expect(suggestDecisions(request, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
+    await expect(suggestWithClaude(request, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -81,7 +81,7 @@ describe('suggestDecisions', () => {
     ['JSON without suggestions', { content: [{ type: 'text', text: '{}' }] }, 'failed'],
   ])('reports %s', async (_, fields, error) => {
     mockCreate.mockResolvedValue(reply(fields));
-    await expect(suggestDecisions(request, 'key')).resolves.toEqual({ ok: false, error });
+    await expect(suggestWithClaude(request, 'key')).resolves.toEqual({ ok: false, error });
   });
 
   test.each([
@@ -90,36 +90,6 @@ describe('suggestDecisions', () => {
     ['any other failure', () => new Anthropic.APIError('500'), 'failed'],
   ])('reports %s', async (_, makeError, error) => {
     mockCreate.mockRejectedValue(makeError());
-    await expect(suggestDecisions(request, 'key')).resolves.toEqual({ ok: false, error });
-  });
-});
-
-describe('POST /api/sort', () => {
-  const post = (body: unknown) =>
-    POST(new Request('https://example.test/api/sort', { method: 'POST', body: JSON.stringify(body) }));
-
-  afterEach(() => {
-    delete process.env.ANTHROPIC_API_KEY;
-  });
-
-  test('returns the suggestions', async () => {
-    process.env.ANTHROPIC_API_KEY = 'key';
-    mockCreate.mockResolvedValue(reply());
-    const response = await post(request);
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ suggestions });
-  });
-
-  test('refuses a malformed request without calling Claude', async () => {
-    process.env.ANTHROPIC_API_KEY = 'key';
-    const response = await post({ ...request, loops: [] });
-    expect(response.status).toBe(400);
-    expect(mockCreate).not.toHaveBeenCalled();
-  });
-
-  test('says when the server has no API key', async () => {
-    const response = await post(request);
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({ error: 'not_configured' });
+    await expect(suggestWithClaude(request, 'key')).resolves.toEqual({ ok: false, error });
   });
 });

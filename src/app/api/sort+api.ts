@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const parsed = validateSortRequest(body);
   if (!parsed.ok) return error('invalid_request', 400);
 
-  const result = await suggestDecisions(parsed.value, process.env.ANTHROPIC_API_KEY);
+  const result = await suggestDecisions(parsed.value);
   if (!result.ok) return error(result.error, STATUS[result.error]);
   return Response.json(result.value);
 }

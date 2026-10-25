@@ -1,9 +1,10 @@
 # Deploys the AI server (src/app/api) to EAS Hosting on every push to main, or
 # by hand with `npx eas-cli@latest workflow:run deploy-api.yml`.
 #
-# The API key is read from the EAS "production" environment: add
-# ANTHROPIC_API_KEY there with "Sensitive" visibility (EAS Hosting can't use
-# "Secret" variables), then run this workflow again.
+# The AI service's API key is read from the EAS "production" environment:
+# GEMINI_API_KEY or ANTHROPIC_API_KEY, whichever AI_PROVIDER in
+# src/constants/ai.ts uses, with "Sensitive" visibility (EAS Hosting can't use
+# "Secret" variables). After adding or changing it, run this workflow again.
 
 name: Deploy AI server
 

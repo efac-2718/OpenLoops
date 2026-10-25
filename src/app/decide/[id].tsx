@@ -8,6 +8,7 @@ import { Chip } from '@/components/chip';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { AI_SERVICE } from '@/constants/ai';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { decideLoop, editLoop, loopQuery, type LoopRow } from '@/db/loops';
 import { revisitOptions, scheduleOptions, type QuickDate } from '@/domain/dates';
@@ -180,8 +181,8 @@ function DecideForm({ loop }: { loop: LoopRow }) {
           <ThemedText type="smallBold">What&apos;s the decision?</ThemedText>
           {suggestion ? (
             <ThemedText type="small" themeColor="textSecondary" testID="decide-suggestion">
-              Suggested by Claude{suggestion.reason ? `: ${suggestion.reason}` : '.'} Change anything
-              before you confirm.
+              Suggested by {AI_SERVICE.name}
+              {suggestion.reason ? `: ${suggestion.reason}` : '.'} Change anything before you confirm.
             </ThemedText>
           ) : null}
 

@@ -10,6 +10,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { SuggestionPanel } from '@/components/suggestion-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { AI_SERVICE } from '@/constants/ai';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { activeQuery, inboxQuery, type LoopRow } from '@/db/loops';
 import { MAX_LOOPS_PER_SORT } from '@/domain/ai-sort';
@@ -91,9 +92,9 @@ export default function InboxScreen() {
 const SORT_ERRORS: Record<AiSortError, string> = {
   unavailable: 'AI suggestions aren’t available in this version of the app.',
   offline: 'Couldn’t reach the AI server. Check your connection and try again.',
-  not_configured: 'The AI server isn’t set up yet: it has no API key.',
-  busy: 'The AI server is busy. Try again in a minute.',
-  refused: 'Claude declined to suggest decisions for these loops.',
+  not_configured: 'The AI server isn’t set up yet: its API key is missing or not working.',
+  busy: 'The AI service is busy or has reached its daily limit. Try again later.',
+  refused: `${AI_SERVICE.name} declined to suggest decisions for these loops.`,
   failed: 'Something went wrong getting suggestions. Try again.',
 };
 
@@ -105,7 +106,7 @@ function SuggestDecisions({ inbox, suggestions }: { inbox: LoopRow[]; suggestion
 
   let status: string | null = null;
   if (loading) {
-    status = `Claude is looking at ${loopCount(Math.min(pending.length, MAX_LOOPS_PER_SORT))}…`;
+    status = `${AI_SERVICE.name} is looking at ${loopCount(Math.min(pending.length, MAX_LOOPS_PER_SORT))}…`;
   } else if (suggestions.status === 'error' && suggestions.error) {
     status = SORT_ERRORS[suggestions.error];
   } else if (suggestions.status === 'done') {

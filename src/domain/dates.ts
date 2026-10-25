@@ -1,0 +1,53 @@
+/**
+ * Loop dates are calendar days: "due Tuesday", not "due Tuesday 14:32".
+ * They are stored as local midnight of that day.
+ */
+
+export function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+export type QuickDate = { label: string; date: Date };
+
+const MONDAY = 1;
+const THURSDAY = 4;
+const SATURDAY = 6;
+
+/**
+ * Days until the next `weekday` that is at least two days away, so it never
+ * repeats "Today" or "Tomorrow" (on a Sunday, "Next week" is not tomorrow).
+ */
+function daysUntilAfterTomorrow(weekday: number, from: Date): number {
+  const diff = (weekday - from.getDay() + 7) % 7;
+  return diff < 2 ? diff + 7 : diff;
+}
+
+/** One-tap choices for when a scheduled next action happens. */
+export function scheduleOptions(now: Date): QuickDate[] {
+  const today = startOfDay(now);
+  // Monday to Thursday; on Friday Saturday is "Tomorrow", and at the weekend it is already here.
+  const weekendAhead = today.getDay() >= MONDAY && today.getDay() <= THURSDAY;
+  return [
+    { label: 'Today', date: today },
+    { label: 'Tomorrow', date: addDays(today, 1) },
+    ...(weekendAhead
+      ? [{ label: 'This weekend', date: addDays(today, daysUntilAfterTomorrow(SATURDAY, today)) }]
+      : []),
+    { label: 'Next week', date: addDays(today, daysUntilAfterTomorrow(MONDAY, today)) },
+  ];
+}
+
+/** One-tap choices for when to look at a "thinking on this" loop again. */
+export function revisitOptions(now: Date): QuickDate[] {
+  const today = startOfDay(now);
+  return [
+    { label: 'Tomorrow', date: addDays(today, 1) },
+    { label: 'In 3 days', date: addDays(today, 3) },
+    { label: 'In a week', date: addDays(today, 7) },
+    { label: 'In a month', date: addDays(today, 30) },
+  ];
+}

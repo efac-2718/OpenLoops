@@ -1,18 +1,53 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, useColorScheme } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Spacing } from '@/constants/theme';
+import { openDatabase } from '@/db/client';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    openDatabase()
+      .then(() => setSuccess(true), setError)
+      .finally(() => SplashScreen.hideAsync());
+  }, []);
+
+  if (error) {
+    return (
+      <ThemedView style={styles.error}>
+        <ThemedText type="smallBold">Couldn&apos;t open your loops.</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {error.message}
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+  if (!success) return null;
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="decide/[id]" options={{ presentation: 'modal', title: 'Decide' }} />
+      </Stack>
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  error: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: Spacing.four,
+    gap: Spacing.two,
+  },
+});

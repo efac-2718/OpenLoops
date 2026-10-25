@@ -1,0 +1,15 @@
+# Calls the deployed AI server from Expo's cloud and prints what it answers.
+# Run by hand: npx eas-cli@latest workflow:run check-api.yml
+
+name: Check AI server
+
+jobs:
+  check:
+    name: Call the AI server
+    steps:
+      - name: Call /api/sort
+        run: |
+          echo "--- GET (expect 405)"
+          curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" https://open-loops.expo.app/api/sort || true
+          echo "--- POST with a test loop"
+          curl -sS -i --max-time 120 -w "\nHTTP %{http_code} in %{time_total}s\n" -X POST -H 'content-type: application/json' -d '{"today":"2026-10-25","weekday":"Sunday","activeCount":0,"activeCap":7,"loops":[{"id":"t1","title":"Buy milk","notes":null,"captured":"2026-10-25"}]}' https://open-loops.expo.app/api/sort || true

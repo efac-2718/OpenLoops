@@ -1,6 +1,13 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, type TextInputInstance } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type TextInputInstance,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -33,6 +40,18 @@ export default function CaptureScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.content}>
+          <View style={styles.topBar}>
+            <Pressable
+              testID="open-settings"
+              accessibilityRole="button"
+              hitSlop={Spacing.three}
+              onPress={() => router.push('/settings')}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedText type="smallBold" themeColor="accent">
+                Settings
+              </ThemedText>
+            </Pressable>
+          </View>
           <ThemedText type="subtitle">What&apos;s on your mind?</ThemedText>
           <ThemedText themeColor="textSecondary">
             Get it out of your head. You&apos;ll decide what to do with it later.
@@ -95,8 +114,15 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
     maxWidth: MaxContentWidth,
-    paddingTop: Spacing.five,
+    paddingTop: Spacing.three,
     gap: Spacing.three,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  pressed: {
+    opacity: 0.7,
   },
   input: {
     minHeight: 120,

@@ -2,7 +2,15 @@
 
 A mobile app for closing open loops: get what's on your mind out of your head, then give every item a decision. Built with Expo (SDK 58), local-first: all data lives in SQLite on the device.
 
-## Try it on your phone
+## Install the app
+
+The **preview build** is the app on its own: install it once and it runs without a computer. Open the build's link on your Android phone, download the APK, and install it (allow installs from your browser when Android asks). Anyone you share the link with can install it too.
+
+New versions arrive over the air. Every push to `main` publishes an update (`.eas/workflows/publish-update.yml`); the app downloads it in the background when it opens and switches to it the next time it opens. To get it right away: **Settings → App version → Check for updates**. Your loops are kept.
+
+An update only reaches builds made from the same native code (the `fingerprint` runtime version in `app.json`). After adding a library with native code or changing `app.json`, make a new preview build and install it over the old one.
+
+## Run it from your computer (Expo Go)
 
 You need a computer (Windows, macOS or Linux) and a phone on the same Wi-Fi network.
 
@@ -25,22 +33,26 @@ If the phone can't connect (for example on a work or university network that blo
 
 ## The development build
 
-Some features need native code that Expo Go doesn't have: the home-screen widget and the app shortcuts. They live in a **development build**, an install of this app that works like Expo Go (start the dev server, the app loads the latest code and reloads as you edit) but carries these extra native pieces.
+Some features need native code that Expo Go doesn't have: the home-screen widget and the app shortcuts. To work on them, use a **development build**: an install that works like Expo Go (start the dev server, the app loads the latest code and reloads as you edit) but carries these extra native pieces.
 
-1. **Install it once.** Open the build's link on your Android phone, download the APK, and install it (allow installs from your browser when Android asks). It appears as **Open Loops**.
+The development build is a separate app, **Open Loops Dev** (`com.efac2781.openloops.dev`, link scheme `openloops-dev`), set by `app.config.js` when `APP_VARIANT=development`. It sits next to the real app with its own data, so trying things out never touches your loops.
+
+1. **Install it once** from the build's link, like the preview build.
 2. **Start the dev server** on your computer, in this folder:
 
    ```bash
    git pull
    npm install
-   npx expo start
+   npm run dev
    ```
 
-3. **Open Open Loops on the phone.** It lists the dev server running on your network; tap it (or scan the QR code with the phone's camera). If the phone can't see your computer, use `npx expo start --tunnel`.
+   On Windows, `npm run dev` doesn't work in PowerShell; run `$env:APP_VARIANT="development"; npx expo start` instead.
+
+3. **Open Open Loops Dev on the phone.** It lists the dev server running on your network; tap it (or scan the QR code with the phone's camera). If the phone can't see your computer, add `--tunnel`.
 
 Code changes don't need a new build; only adding native modules or changing `app.json` plugins does. To use Expo Go instead, run `npx expo start --go`.
 
-The development build has its own data, separate from Expo Go's: export a JSON backup in Expo Go, then restore it in the development build (Settings → Restore from a backup).
+Each install has its own data. To move loops between them, export a JSON backup in one and restore it in the other (Settings → Restore from a backup).
 
 ### Home-screen widget and shortcuts
 
@@ -67,7 +79,7 @@ src/
     (tabs)/thinking.tsx  Thinking: loops left open on purpose, with their revisit day
     (tabs)/close.tsx   Tonight: the nightly close and its reminder time
     decide/[id].tsx    Decide: give a loop a decision, or change one
-    settings.tsx       Settings: active-loop limit, export as Markdown or JSON, restore from a backup
+    settings.tsx       Settings: active-loop limit, export, restore from a backup, app version and updates
     review.tsx         Weekly review: a step-by-step look at every open loop
   domain/              The rules, as plain TypeScript (no React, no database)
     loop.ts            States, decisions, active-loop cap, what the nightly close asks about
@@ -92,6 +104,7 @@ src/
     share-file.ts      Opens the share sheet for an export (downloads on web)
     home-widget.ts     Pushes the summary to the home-screen widget (only where its native code exists)
     pick-text-file.ts  Lets the user choose a backup file and reads it
+    app-updates.ts     Which version is running, and checking for an over-the-air update
   widgets/
     loops-widget.tsx   The Android home-screen widget's layout (runs in the widget's own runtime)
   components/, hooks/, utils/, constants/
@@ -140,11 +153,18 @@ Everything stays on the phone. **Settings → Your data** exports a copy through
 
 ## Known issues
 
-- **Tapping the nightly reminder doesn't open Tonight in Expo Go** (Android). The reminder itself arrives. Check this again in an installed build; the handling is in `useOpenCloseFromReminder` in `src/services/close-reminder.ts`.
+- **Tapping the nightly reminder doesn't open Tonight in Expo Go** (Android). It works in installed builds. The handling is in `useOpenCloseFromReminder` in `src/services/close-reminder.ts`.
+- **The Capture and Tonight shortcuts showed an error** in the first development build. Not investigated yet; check them in the preview build.
 
 ## Cloud builds
 
-`eas.json` has a `development` profile (an Android development build, APK) and a `simulator` profile (an iOS Simulator app and an Android APK). Builds run on Expo's servers from this GitHub repository, so `app.json` needs the Expo project's ID under `extra.eas.projectId`.
+`eas.json` has three profiles:
+
+- `preview`: the app on its own (Android APK, internal distribution), receiving updates on the `preview` channel.
+- `development`: the Open Loops Dev development build (Android APK).
+- `simulator`: an iOS Simulator app and an Android APK.
+
+Builds and updates run on Expo's servers from this GitHub repository, so `app.json` needs the Expo project's ID under `extra.eas.projectId`.
 
 ## Web
 

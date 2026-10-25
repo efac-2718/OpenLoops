@@ -1,0 +1,22 @@
+# Sends the latest code on main to installed copies of the app (the "preview"
+# build), over the air. Runs on every push to main, or by hand with
+# `npx eas-cli@latest workflow:run publish-update.yml`.
+#
+# An update only reaches builds with the same native code (the fingerprint
+# runtime version in app.json). After adding a native library, make a new
+# preview build.
+
+name: Publish update
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  publish_update:
+    name: Publish update to the preview channel
+    type: update
+    environment: preview
+    params:
+      channel: preview
+      platform: android

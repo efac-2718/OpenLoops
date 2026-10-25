@@ -15,6 +15,7 @@ import { parseBackup, type Backup, type BackupError } from '@/domain/backup';
 import { dayKey } from '@/domain/dates';
 import { exportFileName, toJson, toMarkdown } from '@/domain/export';
 import { useActiveCap } from '@/hooks/use-settings';
+import { runningVersion, updateNow, type UpdateResult } from '@/services/app-updates';
 import { pickTextFile } from '@/services/pick-text-file';
 import { shareTextFile } from '@/services/share-file';
 import { loopCount } from '@/utils/plural';
@@ -29,6 +30,7 @@ export default function SettingsScreen() {
           <ActiveLimit />
           <ExportData />
           <RestoreData />
+          <AppVersion />
         </View>
       </ScrollView>
     </ThemedView>
@@ -229,6 +231,64 @@ function RestorePreview({
         onPress={onCancel}
       />
     </View>
+  );
+}
+
+const UPDATE_MESSAGES: Record<UpdateResult, string> = {
+  restarting: 'Restarting into the new version…',
+  up_to_date: 'You have the latest version.',
+  unavailable: 'This copy of the app can’t download updates.',
+  failed: 'Couldn’t check for updates. Check your connection and try again.',
+};
+
+function AppVersion() {
+  const version = runningVersion();
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  // Expo Go and development builds get their code from the dev server instead.
+  if (version.source === 'dev_server') return null;
+
+  async function check() {
+    setChecking(true);
+    setStatus(null);
+    const result = await updateNow();
+    setChecking(false);
+    setStatus(UPDATE_MESSAGES[result]);
+  }
+
+  const published = version.publishedAt?.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.card}>
+      <ThemedText type="smallBold">App version</ThemedText>
+      <ThemedText type="small" testID="app-version">
+        {version.source === 'update'
+          ? `Updated ${published ?? 'over the air'}`
+          : `As installed${published ? `, built ${published}` : ''}`}
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        New versions download by themselves when you open the app, and take effect the next time
+        you open it. Your loops are kept.
+      </ThemedText>
+      <Button
+        testID="check-updates"
+        label={checking ? 'Checking…' : 'Check for updates'}
+        variant="secondary"
+        disabled={checking}
+        onPress={check}
+      />
+      {status ? (
+        <ThemedText type="small" themeColor="textSecondary" testID="update-status">
+          {status}
+        </ThemedText>
+      ) : null}
+    </ThemedView>
   );
 }
 

@@ -71,6 +71,12 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8663987e-85ea-4f54-b50a-4ba07ca676ab"
+    },
     "owner": "efac_2781",
     "extra": {
       "eas": {

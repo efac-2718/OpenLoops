@@ -84,7 +84,9 @@ Every loop starts in `inbox` and leaves with one decision:
 
 ### The nightly close
 
-The Tonight tab lists every loop that needs a decision before bed: anything still in the inbox, anything scheduled for today or overdue, and anything whose "thinking" revisit day has come. Once everything has a home, **Close the day** records it in `daily_closes`. Pick a reminder time and the app sends a local notification every night at that time (local notifications work in Expo Go; nothing goes through a server).
+The Tonight tab lists every loop that needs a decision before bed: anything still in the inbox, anything scheduled for today or overdue, and anything whose "thinking" revisit day has come. Once everything has a home, **Close the day** records it in `daily_closes`. Pick a reminder time and the app sends a local notification every night at that time; nothing goes through a server. **Send a test reminder** checks that reminders arrive.
+
+The app imports only the local-notification files of `expo-notifications` (see `src/services/local-notifications.ts`), never the package itself: its main entry also loads a push-only native module that Expo Go on Android doesn't include, which crashes the app at startup. Notifications load on first use, after checking the native modules exist, so if they're missing the reminder card says so instead of the app crashing.
 
 ### The weekly review
 

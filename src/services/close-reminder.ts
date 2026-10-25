@@ -1,56 +1,117 @@
 /**
  * The nightly close reminder: a local notification repeated every day at the
- * chosen time. Local notifications need no server and work in Expo Go.
+ * chosen time. Local notifications need no server.
+ *
+ * Notifications are loaded on first use, and only after checking that the app
+ * has their native code, so a missing piece turns the reminder off instead of
+ * crashing the app.
  */
 
-import * as Notifications from 'expo-notifications';
-import { AndroidImportance } from 'expo-notifications';
+import { requireOptionalNativeModule } from 'expo';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import type { CloseTime } from '@/domain/reminder';
 
+import type { Notification } from './local-notifications';
+
+type LocalNotifications = typeof import('./local-notifications');
+
 const REMINDER_ID = 'nightly-close';
 const CHANNEL_ID = 'nightly-close';
+/** Marks notifications that open the nightly close when tapped. */
+const OPENS_CLOSE = { screen: 'close' };
 
-export type ReminderResult = 'scheduled' | 'cancelled' | 'denied' | 'unsupported';
+const CONTENT = {
+  title: 'Close the day',
+  body: 'Give every open loop a home before bed.',
+  data: OPENS_CLOSE,
+};
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+/** The native modules that local-notifications.ts needs. */
+const REQUIRED_NATIVE_MODULES = [
+  'ExpoNotificationScheduler',
+  'ExpoNotificationPermissionsModule',
+  'ExpoNotificationsEmitter',
+  'ExpoNotificationsHandlerModule',
+  ...(Platform.OS === 'android' ? ['ExpoNotificationChannelManager'] : []),
+];
+
+/** 'unavailable' means this copy of the app can't schedule notifications at all. */
+export type ReminderResult = 'scheduled' | 'cancelled' | 'denied' | 'unsupported' | 'unavailable';
+
+let loading: Promise<LocalNotifications | null> | null = null;
+
+function loadNotifications(): Promise<LocalNotifications | null> {
+  loading ??= (async () => {
+    if (REQUIRED_NATIVE_MODULES.some((name) => requireOptionalNativeModule(name) === null)) {
+      return null;
+    }
+    try {
+      const notifications = await import('./local-notifications');
+      notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+        }),
+      });
+      return notifications;
+    } catch {
+      return null;
+    }
+  })();
+  return loading;
+}
+
+async function hasPermission(notifications: LocalNotifications): Promise<boolean> {
+  if (Platform.OS === 'android') {
+    // Android 13+ only shows the permission prompt once a channel exists.
+    await notifications.setNotificationChannelAsync(CHANNEL_ID, {
+      name: 'Nightly close',
+      importance: notifications.AndroidImportance.DEFAULT,
+    });
+  }
+  const existing = await notifications.getPermissionsAsync();
+  if (existing.granted) return true;
+  return (await notifications.requestPermissionsAsync()).granted;
+}
 
 /** Replaces any existing reminder with one at `time`, or removes it when `time` is null. */
 export async function setCloseReminder(time: CloseTime | null): Promise<ReminderResult> {
-  await Notifications.cancelScheduledNotificationAsync(REMINDER_ID);
+  const notifications = await loadNotifications();
+  if (!notifications) return 'unavailable';
+
+  await notifications.cancelScheduledNotificationAsync(REMINDER_ID);
   if (!time) return 'cancelled';
+  if (!(await hasPermission(notifications))) return 'denied';
 
-  if (Platform.OS === 'android') {
-    // Android 13+ only shows the permission prompt once a channel exists.
-    await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: 'Nightly close',
-      importance: AndroidImportance.DEFAULT,
-    });
-  }
-  const existing = await Notifications.getPermissionsAsync();
-  const { granted } = existing.granted ? existing : await Notifications.requestPermissionsAsync();
-  if (!granted) return 'denied';
-
-  await Notifications.scheduleNotificationAsync({
+  await notifications.scheduleNotificationAsync({
     identifier: REMINDER_ID,
-    content: {
-      title: 'Close the day',
-      body: 'Give every open loop a home before bed.',
-    },
+    content: CONTENT,
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      type: notifications.SchedulableTriggerInputTypes.DAILY,
       hour: time.hour,
       minute: time.minute,
+      channelId: CHANNEL_ID,
+    },
+  });
+  return 'scheduled';
+}
+
+/** Sends the reminder once, a few seconds from now, to check that reminders arrive. */
+export async function sendTestReminder(): Promise<ReminderResult> {
+  const notifications = await loadNotifications();
+  if (!notifications) return 'unavailable';
+  if (!(await hasPermission(notifications))) return 'denied';
+
+  await notifications.scheduleNotificationAsync({
+    content: CONTENT,
+    trigger: {
+      type: notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 5,
       channelId: CHANNEL_ID,
     },
   });
@@ -60,18 +121,28 @@ export async function setCloseReminder(time: CloseTime | null): Promise<Reminder
 /** Opens the nightly close when the user taps the reminder. Use inside the navigator. */
 export function useOpenCloseFromReminder() {
   useEffect(() => {
-    function open(notification: Notifications.Notification) {
-      if (notification.request.identifier !== REMINDER_ID) return;
-      router.navigate('/close');
-      Notifications.clearLastNotificationResponse();
-    }
+    let active = true;
+    let subscription: { remove: () => void } | undefined;
 
-    const last = Notifications.getLastNotificationResponse();
-    if (last) open(last.notification);
+    loadNotifications().then((notifications) => {
+      if (!notifications || !active) return;
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) =>
-      open(response.notification),
-    );
-    return () => subscription.remove();
+      const open = (notification: Notification) => {
+        if (notification.request.content.data?.screen !== OPENS_CLOSE.screen) return;
+        router.navigate('/close');
+        notifications.clearLastNotificationResponse();
+      };
+
+      const last = notifications.getLastNotificationResponse();
+      if (last) open(last.notification);
+      subscription = notifications.addNotificationResponseReceivedListener((response) =>
+        open(response.notification),
+      );
+    });
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
   }, []);
 }

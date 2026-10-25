@@ -6,4 +6,8 @@ export async function setCloseReminder(): Promise<ReminderResult> {
   return 'unsupported';
 }
 
+export async function sendTestReminder(): Promise<ReminderResult> {
+  return 'unsupported';
+}
+
 export function useOpenCloseFromReminder() {}

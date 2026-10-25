@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -25,7 +25,11 @@ import {
 } from '@/domain/reminder';
 import { isReviewDue, nextReviewDay } from '@/domain/review';
 import { useCloseTime } from '@/hooks/use-settings';
-import { setCloseReminder, type ReminderResult } from '@/services/close-reminder';
+import {
+  sendTestReminder,
+  setCloseReminder,
+  type ReminderResult,
+} from '@/services/close-reminder';
 import { formatDayInline } from '@/utils/describe-loop';
 import { timeAgo } from '@/utils/time-ago';
 import { loopCount, loopsNeed } from '@/utils/plural';
@@ -162,21 +166,32 @@ const formatTime = ({ hour, minute }: CloseTime) =>
 
 function ReminderSettings() {
   const closeTime = useCloseTime();
-  const [result, setResult] = useState<ReminderResult | null>(null);
+  const [result, setResult] = useState<{ outcome: ReminderResult; test: boolean } | null>(null);
 
   async function choose(time: CloseTime | null) {
     const outcome = await setCloseReminder(time);
-    // Without permission there is no reminder, so keep the old setting.
-    if (outcome !== 'denied') setSetting('close_time', time ? formatCloseTime(time) : 'off');
-    setResult(outcome);
+    // Without permission, or without notifications at all, there is no reminder: keep the old setting.
+    if (outcome !== 'denied' && outcome !== 'unavailable') {
+      setSetting('close_time', time ? formatCloseTime(time) : 'off');
+    }
+    setResult({ outcome, test: false });
+  }
+
+  async function test() {
+    setResult({ outcome: await sendTestReminder(), test: true });
   }
 
   let status: string;
-  if (result === 'denied') {
+  if (result?.outcome === 'denied') {
     status =
-      'Notifications are turned off for Open Loops. Turn them on in your phone’s Settings, then pick a time again.';
-  } else if (result === 'unsupported') {
+      'Notifications are turned off for Open Loops. Turn them on in your phone’s Settings, then try again.';
+  } else if (result?.outcome === 'unavailable') {
+    status =
+      'This copy of the app can’t schedule reminders. Expo Go on Android may not support them; an installed build of the app will.';
+  } else if (result?.outcome === 'unsupported') {
     status = 'Reminders work in the phone app.';
+  } else if (result?.test) {
+    status = 'A test reminder is on its way. It should arrive in about 5 seconds.';
   } else if (closeTime) {
     status = `Every night at ${formatTime(closeTime)}.`;
   } else {
@@ -206,6 +221,16 @@ function ReminderSettings() {
       <ThemedText type="small" themeColor="textSecondary" testID="reminder-status">
         {status}
       </ThemedText>
+      <Pressable
+        testID="reminder-test"
+        accessibilityRole="button"
+        hitSlop={Spacing.two}
+        onPress={test}
+        style={({ pressed }) => pressed && styles.pressed}>
+        <ThemedText type="smallBold" themeColor="accent">
+          Send a test reminder
+        </ThemedText>
+      </Pressable>
     </ThemedView>
   );
 }
@@ -239,6 +264,9 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     borderRadius: Spacing.three,
     gap: Spacing.two,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   chips: {
     flexDirection: 'row',

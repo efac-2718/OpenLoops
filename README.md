@@ -10,6 +10,8 @@ New versions arrive over the air. Every push to `main` publishes an update (`.ea
 
 An update only reaches builds made from the same native code (the `fingerprint` runtime version in `app.json`). After adding a library with native code or changing `app.json`, make a new preview build and install it over the old one.
 
+A build only takes updates published after it bundled its own code, since the app always runs the newest version it has. An update published while a build is running is older than that build's code and is ignored, so publish again once the build finishes (push to `main`, or run the workflow by hand).
+
 ## Run it from your computer (Expo Go)
 
 You need a computer (Windows, macOS or Linux) and a phone on the same Wi-Fi network.

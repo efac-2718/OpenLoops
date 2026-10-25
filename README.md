@@ -23,6 +23,30 @@ When you save a change to the code, the app on your phone reloads by itself. Pre
 
 If the phone can't connect (for example on a work or university network that blocks devices from seeing each other), stop the server and run `npx expo start --tunnel` instead. If Expo Go says the project needs a different SDK version, update Expo Go from the store.
 
+## The development build
+
+Some features need native code that Expo Go doesn't have: the home-screen widget and the app shortcuts. They live in a **development build**, an install of this app that works like Expo Go (start the dev server, the app loads the latest code and reloads as you edit) but carries these extra native pieces.
+
+1. **Install it once.** Open the build's link on your Android phone, download the APK, and install it (allow installs from your browser when Android asks). It appears as **Open Loops**.
+2. **Start the dev server** on your computer, in this folder:
+
+   ```bash
+   git pull
+   npm install
+   npx expo start
+   ```
+
+3. **Open Open Loops on the phone.** It lists the dev server running on your network; tap it (or scan the QR code with the phone's camera). If the phone can't see your computer, use `npx expo start --tunnel`.
+
+Code changes don't need a new build; only adding native modules or changing `app.json` plugins does. To use Expo Go instead, run `npx expo start --go`.
+
+The development build has its own data, separate from Expo Go's: export a JSON backup in Expo Go, then restore it in the development build (Settings → Restore from a backup).
+
+### Home-screen widget and shortcuts
+
+- **Widget:** long-press the home screen → **Widgets** → **Open Loops**. It shows how many loops are waiting for a decision, what's due today, and whether today is closed. It updates whenever the app changes something. On Android, `expo-widgets` can't open the app from a widget tap, so the widget only shows information.
+- **Shortcuts:** long-press the app icon for **Capture** and **Tonight**. Drag one onto the home screen to get a one-tap icon. They're added by `plugins/with-android-shortcuts.js` and open the app through its `openloops://` links.
+
 ## Commands
 
 ```bash
@@ -66,8 +90,13 @@ src/
   services/
     close-reminder.ts  Daily local notification; tapping it opens Tonight
     share-file.ts      Opens the share sheet for an export (downloads on web)
+    home-widget.ts     Pushes the summary to the home-screen widget (only where its native code exists)
     pick-text-file.ts  Lets the user choose a backup file and reads it
+  widgets/
+    loops-widget.tsx   The Android home-screen widget's layout (runs in the widget's own runtime)
   components/, hooks/, utils/, constants/
+plugins/
+  with-android-shortcuts.js  Adds the Capture and Tonight app shortcuts on Android
 ```
 
 ### The loop rules
@@ -115,7 +144,7 @@ Everything stays on the phone. **Settings → Your data** exports a copy through
 
 ## Cloud builds
 
-`eas.json` has a `simulator` profile that builds an iOS Simulator app and an Android APK. Builds run on Expo's servers from this GitHub repository, so `app.json` needs the Expo project's ID under `extra.eas.projectId`.
+`eas.json` has a `development` profile (an Android development build, APK) and a `simulator` profile (an iOS Simulator app and an Android APK). Builds run on Expo's servers from this GitHub repository, so `app.json` needs the Expo project's ID under `extra.eas.projectId`.
 
 ## Web
 

@@ -42,7 +42,30 @@
           "enableRemoteNotifications": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "LoopsWidget",
+              "displayName": "Open Loops",
+              "description": "Your inbox and today at a glance",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall"
+                ]
+              },
+              "android": {
+                "targetCellWidth": 2,
+                "targetCellHeight": 2
+              }
+            }
+          ]
+        }
+      ],
+      "./plugins/with-android-shortcuts"
     ],
     "experiments": {
       "typedRoutes": true,

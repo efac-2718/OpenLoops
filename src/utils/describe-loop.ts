@@ -1,5 +1,5 @@
 import { addDays, startOfDay } from '@/domain/dates';
-import { attentionReason, type Loop } from '@/domain/loop';
+import { attentionReason, type Decision, type Loop } from '@/domain/loop';
 
 import { timeAgo } from './time-ago';
 
@@ -62,6 +62,24 @@ export function loopCardText(
       return { title: loop.title, detail: `Captured ${timeAgo(loop.createdAt, now)}`, overdue: false };
     default:
       return { title: loop.title, detail: describeDecision(loop, now), overdue: false };
+  }
+}
+
+/** One line saying what a suggested decision would do. */
+export function describeSuggestion(decision: Decision, now: Date): string {
+  switch (decision.kind) {
+    case 'done':
+      return 'Do it now: it takes about two minutes';
+    case 'next':
+      return `Next action: ${decision.nextAction}`;
+    case 'scheduled':
+      return `${formatDay(decision.dueAt, now)}: ${decision.nextAction}`;
+    case 'waiting':
+      return `Delegate: waiting on ${decision.waitingOn}`;
+    case 'thinking':
+      return `Think on it until ${formatDayInline(decision.revisitAt, now)}`;
+    case 'dropped':
+      return 'Drop it';
   }
 }
 

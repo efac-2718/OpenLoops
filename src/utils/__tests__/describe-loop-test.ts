@@ -1,4 +1,4 @@
-import { describeDecision, formatDay, formatDayInline } from '../describe-loop';
+import { describeDecision, describeSuggestion, formatDay, formatDayInline } from '../describe-loop';
 
 const now = new Date(2026, 9, 28, 21, 30);
 const blank = { nextAction: null, dueAt: null, waitingOn: null, revisitAt: null };
@@ -38,5 +38,18 @@ describe('describeDecision', () => {
     [{ ...blank, state: 'dropped' as const }, 'Dropped'],
   ])('%#: %j', (loop, expected) => {
     expect(describeDecision(loop, now)).toBe(expected);
+  });
+});
+
+describe('describeSuggestion', () => {
+  test.each([
+    [{ kind: 'done' as const }, 'Do it now: it takes about two minutes'],
+    [{ kind: 'next' as const, nextAction: 'Email Sam' }, 'Next action: Email Sam'],
+    [{ kind: 'scheduled' as const, nextAction: 'Call the bank', dueAt: new Date(2026, 9, 29) }, 'Tomorrow: Call the bank'],
+    [{ kind: 'waiting' as const, waitingOn: 'Priya' }, 'Delegate: waiting on Priya'],
+    [{ kind: 'thinking' as const, revisitAt: new Date(2026, 9, 29) }, 'Think on it until tomorrow'],
+    [{ kind: 'dropped' as const }, 'Drop it'],
+  ])('%j', (decision, expected) => {
+    expect(describeSuggestion(decision, now)).toBe(expected);
   });
 });

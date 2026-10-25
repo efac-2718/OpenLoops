@@ -135,5 +135,9 @@ export function planMerge<Row extends { updatedAt: Date }, Incoming extends Row>
   return plan;
 }
 
-/** Settings that belong to this phone rather than to the data: a reminder needs this phone's permission. */
-export const DEVICE_SETTINGS = ['close_time'];
+/**
+ * Settings that belong to this phone rather than to the data: a reminder needs
+ * this phone's permission, and sending loops to the AI server is agreed to on
+ * each phone, never switched on by a restore.
+ */
+export const DEVICE_SETTINGS = ['close_time', 'ai_suggestions'];

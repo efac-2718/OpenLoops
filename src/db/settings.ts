@@ -5,7 +5,7 @@ import { DEFAULT_ACTIVE_CAP } from '@/domain/loop';
 import { getDb, type Reader } from './client';
 import { settings } from './schema';
 
-export type SettingKey = 'active_cap' | 'close_time';
+export type SettingKey = 'active_cap' | 'close_time' | 'ai_suggestions';
 
 export function settingQuery(key: SettingKey) {
   return getDb().select().from(settings).where(eq(settings.key, key)).limit(1);

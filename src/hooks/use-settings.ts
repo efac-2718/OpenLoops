@@ -13,3 +13,9 @@ export function useCloseTime(): CloseTime | null {
   const { data } = useLiveQuery(settingQuery('close_time'));
   return parseCloseTime(data[0]?.value);
 }
+
+/** Whether this phone has agreed to send inbox loops to the AI server for suggestions. */
+export function useAiSuggestionsEnabled(): boolean {
+  const { data } = useLiveQuery(settingQuery('ai_suggestions'));
+  return data[0]?.value === 'on';
+}

@@ -6,15 +6,18 @@ import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { AI_SERVER_ORIGIN } from '@/constants/ai';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { readExportData } from '@/db/export';
 import { applyRestore, previewRestore, type RestoreSummary } from '@/db/restore';
 import { activeQuery } from '@/db/loops';
 import { setSetting } from '@/db/settings';
+import { MAX_LOOPS_PER_SORT } from '@/domain/ai-sort';
 import { parseBackup, type Backup, type BackupError } from '@/domain/backup';
 import { dayKey } from '@/domain/dates';
 import { exportFileName, toJson, toMarkdown } from '@/domain/export';
-import { useActiveCap } from '@/hooks/use-settings';
+import { clearSuggestions } from '@/hooks/use-ai-suggestions';
+import { useActiveCap, useAiSuggestionsEnabled } from '@/hooks/use-settings';
 import { runningVersion, updateNow, type UpdateResult } from '@/services/app-updates';
 import { pickTextFile } from '@/services/pick-text-file';
 import { shareTextFile } from '@/services/share-file';
@@ -28,6 +31,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.inner}>
           <ActiveLimit />
+          <AiSuggestions />
           <ExportData />
           <RestoreData />
           <AppVersion />
@@ -68,6 +72,38 @@ function ActiveLimit() {
   );
 }
 
+function AiSuggestions() {
+  const enabled = useAiSuggestionsEnabled();
+  // Hidden until the AI server is deployed (src/constants/ai.ts).
+  if (!AI_SERVER_ORIGIN) return null;
+
+  function setEnabled(on: boolean) {
+    setSetting('ai_suggestions', on ? 'on' : 'off');
+    if (!on) clearSuggestions();
+  }
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.card}>
+      <ThemedText type="smallBold">AI suggestions</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Get a suggested decision for each loop in your inbox from Claude, Anthropic’s AI. You
+        still accept or change every one.
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Only when you tap Suggest decisions, the wording and notes of up to{' '}
+        {MAX_LOOPS_PER_SORT} inbox loops are sent through this app’s server to Anthropic. The
+        server doesn’t store them. Nothing else leaves your phone.
+      </ThemedText>
+      <Button
+        testID="ai-toggle"
+        label={enabled ? 'Turn off AI suggestions' : 'Turn on AI suggestions'}
+        variant="secondary"
+        onPress={() => setEnabled(!enabled)}
+      />
+    </ThemedView>
+  );
+}
+
 function ExportData() {
   const [status, setStatus] = useState<string | null>(null);
 
@@ -86,7 +122,8 @@ function ExportData() {
     <ThemedView type="backgroundElement" style={styles.card}>
       <ThemedText type="smallBold">Your data</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Everything stays on this phone. Export a copy to keep, read, or move somewhere else.
+        Your loops are stored only on this phone. Export a copy to keep, read, or move somewhere
+        else.
       </ThemedText>
       <Button
         testID="export-markdown"
@@ -219,7 +256,7 @@ function RestorePreview({
             </ThemedText>
           ))}
           <ThemedText type="small" themeColor="textSecondary">
-            Nothing on this phone will be deleted. Your reminder time stays as it is.
+            Nothing on this phone will be deleted. Your reminder time and AI setting stay as they are.
           </ThemedText>
           <Button testID="restore-confirm" label="Restore" onPress={onRestore} />
         </>

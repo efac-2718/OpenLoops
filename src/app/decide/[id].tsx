@@ -12,6 +12,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { decideLoop, editLoop, loopQuery, type LoopRow } from '@/db/loops';
 import { revisitOptions, scheduleOptions, type QuickDate } from '@/domain/dates';
 import type { CaptureError, Decision, DecisionError, DecisionKind } from '@/domain/loop';
+import { suggestionFor, useAiSuggestions } from '@/hooks/use-ai-suggestions';
 import { useTheme } from '@/hooks/use-theme';
 import { describeDecision } from '@/utils/describe-loop';
 import { timeAgo } from '@/utils/time-ago';
@@ -88,12 +89,24 @@ export default function DecideScreen() {
 
 function DecideForm({ loop }: { loop: LoopRow }) {
   const [now] = useState(() => new Date());
-  const [kind, setKind] = useState<DecisionKind | null>(null);
+  const suggestions = useAiSuggestions();
+  // An AI suggestion fills the form in; nothing is decided until the person confirms.
+  const [suggestion] = useState(() => (loop.state === 'inbox' ? suggestionFor(suggestions, loop) : null));
+  const suggested = suggestion?.decision;
+  const [kind, setKind] = useState<DecisionKind | null>(suggested?.kind ?? null);
   // Text carries over when changing a decision, e.g. rescheduling keeps the next action.
-  const [nextAction, setNextAction] = useState(loop.nextAction ?? '');
-  const [waitingOn, setWaitingOn] = useState(loop.waitingOn ?? '');
-  const [dueAt, setDueAt] = useState<Date | null>(null);
-  const [revisitAt, setRevisitAt] = useState<Date | null>(null);
+  const [nextAction, setNextAction] = useState(
+    (suggested?.kind === 'next' || suggested?.kind === 'scheduled' ? suggested.nextAction : null) ??
+      loop.nextAction ??
+      '',
+  );
+  const [waitingOn, setWaitingOn] = useState(
+    (suggested?.kind === 'waiting' ? suggested.waitingOn : null) ?? loop.waitingOn ?? '',
+  );
+  const [dueAt, setDueAt] = useState<Date | null>(suggested?.kind === 'scheduled' ? suggested.dueAt : null);
+  const [revisitAt, setRevisitAt] = useState<Date | null>(
+    suggested?.kind === 'thinking' ? suggested.revisitAt : null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const undecided = loop.state === 'inbox';
@@ -165,6 +178,12 @@ function DecideForm({ loop }: { loop: LoopRow }) {
           />
 
           <ThemedText type="smallBold">What&apos;s the decision?</ThemedText>
+          {suggestion ? (
+            <ThemedText type="small" themeColor="textSecondary" testID="decide-suggestion">
+              Suggested by Claude{suggestion.reason ? `: ${suggestion.reason}` : '.'} Change anything
+              before you confirm.
+            </ThemedText>
+          ) : null}
 
           <View style={styles.options} accessibilityRole="radiogroup">
             {options.map((option) => (
@@ -183,7 +202,7 @@ function DecideForm({ loop }: { loop: LoopRow }) {
                     placeholder="Email Sam about the leak"
                     multiline
                     submitBehavior="blurAndSubmit"
-                    autoFocus
+                    autoFocus={!suggestion}
                   />
                 ) : null}
                 {option.kind === 'scheduled' ? (
@@ -191,6 +210,7 @@ function DecideForm({ loop }: { loop: LoopRow }) {
                     options={scheduleOptions(now)}
                     value={dueAt}
                     onChange={edit(setDueAt)}
+                    suggested={suggested?.kind === 'scheduled' ? suggested.dueAt : undefined}
                     testIDPrefix="decide-due"
                   />
                 ) : null}
@@ -200,7 +220,7 @@ function DecideForm({ loop }: { loop: LoopRow }) {
                     value={waitingOn}
                     onChangeText={edit(setWaitingOn)}
                     placeholder="Who? e.g. Priya from accounts"
-                    autoFocus
+                    autoFocus={!suggestion}
                   />
                 ) : null}
                 {option.kind === 'thinking' ? (
@@ -208,6 +228,7 @@ function DecideForm({ loop }: { loop: LoopRow }) {
                     options={revisitOptions(now)}
                     value={revisitAt}
                     onChange={edit(setRevisitAt)}
+                    suggested={suggested?.kind === 'thinking' ? suggested.revisitAt : undefined}
                     testIDPrefix="decide-revisit"
                   />
                 ) : null}
@@ -368,13 +389,19 @@ type DayPickerProps = {
   options: QuickDate[];
   value: Date | null;
   onChange: (date: Date) => void;
+  /** A suggested day that isn't one of the quick choices gets a chip of its own. */
+  suggested?: Date;
   testIDPrefix: string;
 };
 
-function DayPicker({ options, value, onChange, testIDPrefix }: DayPickerProps) {
+function DayPicker({ options, value, onChange, suggested, testIDPrefix }: DayPickerProps) {
+  const choices =
+    suggested && !options.some((option) => option.date.getTime() === suggested.getTime())
+      ? [{ label: 'Suggested', date: suggested }, ...options]
+      : options;
   return (
     <View style={styles.days} accessibilityRole="radiogroup">
-      {options.map((option, index) => (
+      {choices.map((option, index) => (
         <Chip
           key={option.label}
           testID={`${testIDPrefix}-${index}`}

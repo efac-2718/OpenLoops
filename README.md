@@ -43,13 +43,14 @@ src/
     (tabs)/thinking.tsx  Thinking: loops left open on purpose, with their revisit day
     (tabs)/close.tsx   Tonight: the nightly close and its reminder time
     decide/[id].tsx    Decide: give a loop a decision, or change one
-    settings.tsx       Settings: active-loop limit, export as Markdown or JSON
+    settings.tsx       Settings: active-loop limit, export as Markdown or JSON, restore from a backup
     review.tsx         Weekly review: a step-by-step look at every open loop
   domain/              The rules, as plain TypeScript (no React, no database)
     loop.ts            States, decisions, active-loop cap, what the nightly close asks about
     dates.ts           Calendar-day helpers and one-tap date choices
     reminder.ts        Nightly reminder times
     export.ts          Markdown and JSON export formats
+    backup.ts          Reads a JSON backup and plans a merge: newer change wins, nothing deleted
     brain-dump.ts      Splits dictated or typed text into separate thoughts
     review.ts          Weekly review steps, what each one asks about, keeping, when one is due
   db/                  SQLite via Drizzle
@@ -61,9 +62,11 @@ src/
     settings.ts        Active-loop cap and reminder time
     reviews.ts         Starts, resumes, and finishes weekly reviews
     export.ts          Reads everything for an export
+    restore.ts         Previews and applies a restore, all or nothing
   services/
     close-reminder.ts  Daily local notification; tapping it opens Tonight
     share-file.ts      Opens the share sheet for an export (downloads on web)
+    pick-text-file.ts  Lets the user choose a backup file and reads it
   components/, hooks/, utils/, constants/
 ```
 
@@ -102,7 +105,13 @@ Tap the mic on your phone's keyboard (for example Gboard) on the Capture screen 
 
 ### Your data
 
-Everything stays on the phone. **Settings → Your data** exports a copy through the system share sheet (save to Drive or Files, email it, and so on): Markdown to read, grouped by decision, or JSON with every loop, nightly close, and setting, for backup or moving elsewhere.
+Everything stays on the phone. **Settings → Your data** exports a copy through the system share sheet (save to Drive or Files, email it, and so on): Markdown to read, grouped by decision, or JSON with every loop, nightly close, weekly review, and setting, for backup or moving elsewhere.
+
+**Settings → Restore from a backup** reads a JSON backup back in, for example when moving from Expo Go to an installed build, or to a new phone. It shows what would change before changing anything, and it merges rather than replaces: loops only in the backup are added, and where both have the same loop, the one changed more recently wins. Nothing is deleted, restoring the same file twice changes nothing, and the reminder time is left alone because it needs this phone's notification permission.
+
+## Known issues
+
+- **Tapping the nightly reminder doesn't open Tonight in Expo Go** (Android). The reminder itself arrives. Check this again in an installed build; the handling is in `useOpenCloseFromReminder` in `src/services/close-reminder.ts`.
 
 ## Cloud builds
 

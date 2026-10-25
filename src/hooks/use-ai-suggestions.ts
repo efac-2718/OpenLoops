@@ -15,12 +15,14 @@ type Entry = { suggestion: Suggestion; loopUpdatedAt: number };
 export type AiSuggestions = {
   status: 'idle' | 'loading' | 'done' | 'error';
   error: AiSortError | null;
+  /** The technical detail behind the last error, if any. */
+  detail: string | null;
   /** How many suggestions the last request brought back. */
   received: number;
   entries: ReadonlyMap<string, Entry>;
 };
 
-let state: AiSuggestions = { status: 'idle', error: null, received: 0, entries: new Map() };
+let state: AiSuggestions = { status: 'idle', error: null, detail: null, received: 0, entries: new Map() };
 const listeners = new Set<() => void>();
 
 function update(changes: Partial<AiSuggestions>) {
@@ -52,7 +54,7 @@ export function suggestionFor(
 
 /** Forgets every suggestion, for when AI suggestions are turned off. */
 export function clearSuggestions(): void {
-  update({ status: 'idle', error: null, received: 0, entries: new Map() });
+  update({ status: 'idle', error: null, detail: null, received: 0, entries: new Map() });
 }
 
 /** Asks for suggestions for the given loops (the first batch of them, oldest first). */
@@ -63,11 +65,11 @@ export async function requestSuggestions(
   if (state.status === 'loading' || loops.length === 0) return;
   const now = new Date();
   const request = buildSortRequest(loops, { now, ...context });
-  update({ status: 'loading', error: null });
+  update({ status: 'loading', error: null, detail: null });
 
   const result = await fetchSuggestions(request);
   if (!result.ok) {
-    update({ status: 'error', error: result.error });
+    update({ status: 'error', error: result.error, detail: result.detail ?? null });
     return;
   }
 

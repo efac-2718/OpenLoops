@@ -84,7 +84,16 @@ test.each([
   ['text that is not JSON', { text: 'Sure!' }, 'failed'],
 ])('reports %s', async (_, fields, error) => {
   mockGenerateContent.mockResolvedValue(reply(fields));
-  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: false, error });
+  await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
+});
+
+test('describes an unexpected failure, without the key', async () => {
+  mockGenerateContent.mockRejectedValue(new ApiError({ message: 'models/x is not found (key secret-key)', status: 404 }));
+  await expect(suggestWithGemini(request, 'secret-key')).resolves.toEqual({
+    ok: false,
+    error: 'failed',
+    detail: 'Gemini: Error: models/x is not found (key [key])',
+  });
 });
 
 test.each([
@@ -95,5 +104,5 @@ test.each([
   ['any other failure', 500, 'Internal', 'failed'],
 ])('reports %s', async (_, status, message, error) => {
   mockGenerateContent.mockRejectedValue(new ApiError({ message, status }));
-  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: false, error });
+  await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
 });

@@ -4,10 +4,18 @@
  */
 
 import { DECISION_KINDS, type RawSuggestion } from '@/domain/ai-sort';
-import type { Result } from '@/domain/loop';
 
 export type SuggestError = 'not_configured' | 'busy' | 'refused' | 'failed';
-export type SuggestResult = Result<{ suggestions: RawSuggestion[] }, SuggestError>;
+/** A failure can carry a short technical detail, passed to the app so a problem can be diagnosed from the phone. */
+export type SuggestResult =
+  | { ok: true; value: { suggestions: RawSuggestion[] } }
+  | { ok: false; error: SuggestError; detail?: string };
+
+/** One line describing an error, with the API key blanked out in case it ever appears. */
+export function describeFailure(error: unknown, apiKey: string): string {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return text.split(apiKey).join('[key]').replace(/\s+/g, ' ').slice(0, 300);
+}
 
 const nullableText = { anyOf: [{ type: 'string' }, { type: 'null' }] };
 
@@ -56,9 +64,11 @@ The reason is one short sentence they can take in at a glance. Return a suggesti
 export function readSuggestions(text: string | undefined): SuggestResult {
   try {
     const parsed = JSON.parse(text ?? '') as { suggestions?: unknown };
-    if (!Array.isArray(parsed.suggestions)) return { ok: false, error: 'failed' };
+    if (!Array.isArray(parsed.suggestions)) {
+      return { ok: false, error: 'failed', detail: 'The answer had no list of suggestions.' };
+    }
     return { ok: true, value: { suggestions: parsed.suggestions as RawSuggestion[] } };
   } catch {
-    return { ok: false, error: 'failed' };
+    return { ok: false, error: 'failed', detail: 'The answer wasn’t valid JSON.' };
   }
 }

@@ -57,3 +57,9 @@ test.each([
   expect(response.status).toBe(status);
   await expect(response.json()).resolves.toEqual({ error });
 });
+
+test('passes on the detail of a failure', async () => {
+  mockSuggestWithGemini.mockResolvedValue({ ok: false, error: 'failed', detail: 'Gemini: Error: not found' });
+  const response = await post(request);
+  await expect(response.json()).resolves.toEqual({ error: 'failed', detail: 'Gemini: Error: not found' });
+});

@@ -9,7 +9,13 @@ import { ApiError, FinishReason, GoogleGenAI } from '@google/genai/web';
 
 import type { SortRequest } from '@/domain/ai-sort';
 
-import { readSuggestions, SUGGESTIONS_SCHEMA, SYSTEM_PROMPT, type SuggestResult } from './sort-prompt';
+import {
+  describeFailure,
+  readSuggestions,
+  SUGGESTIONS_SCHEMA,
+  SYSTEM_PROMPT,
+  type SuggestResult,
+} from './sort-prompt';
 
 // Google's alias for its newest Flash model, which the free tier covers.
 const MODEL = 'gemini-flash-latest';
@@ -46,7 +52,7 @@ export async function suggestWithGemini(request: SortRequest, apiKey: string | u
     // The free tier's per-minute and daily limits.
     if (error instanceof ApiError && error.status === 429) return { ok: false, error: 'busy' };
     console.error('AI sorting: the request to Gemini failed.', error);
-    return { ok: false, error: 'failed' };
+    return { ok: false, error: 'failed', detail: `Gemini: ${describeFailure(error, apiKey)}` };
   }
 
   const finishReason = response.candidates?.[0]?.finishReason;
@@ -58,7 +64,9 @@ export async function suggestWithGemini(request: SortRequest, apiKey: string | u
   if (response.promptFeedback?.blockReason || DECLINED.includes(finishReason)) {
     return { ok: false, error: 'refused' };
   }
-  if (finishReason !== FinishReason.STOP) return { ok: false, error: 'failed' };
+  if (finishReason !== FinishReason.STOP) {
+    return { ok: false, error: 'failed', detail: `Gemini stopped with ${finishReason ?? 'no reason'}.` };
+  }
 
   return readSuggestions(response.text);
 }

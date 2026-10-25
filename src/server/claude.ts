@@ -7,7 +7,13 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import type { SortRequest } from '@/domain/ai-sort';
 
-import { readSuggestions, SUGGESTIONS_SCHEMA, SYSTEM_PROMPT, type SuggestResult } from './sort-prompt';
+import {
+  describeFailure,
+  readSuggestions,
+  SUGGESTIONS_SCHEMA,
+  SYSTEM_PROMPT,
+  type SuggestResult,
+} from './sort-prompt';
 
 const MODEL = 'claude-opus-5-5';
 
@@ -38,7 +44,7 @@ export async function suggestWithClaude(request: SortRequest, apiKey: string | u
     }
     if (error instanceof Anthropic.RateLimitError) return { ok: false, error: 'busy' };
     console.error('AI sorting: the request to Claude failed.', error);
-    return { ok: false, error: 'failed' };
+    return { ok: false, error: 'failed', detail: `Claude: ${describeFailure(error, apiKey)}` };
   }
 
   // Counts only, never the loops themselves.
@@ -46,7 +52,9 @@ export async function suggestWithClaude(request: SortRequest, apiKey: string | u
     `AI sorting: ${request.loops.length} loops, ${response.usage.input_tokens} in / ${response.usage.output_tokens} out tokens, ${response.model}, ${response.stop_reason}`,
   );
   if (response.stop_reason === 'refusal') return { ok: false, error: 'refused' };
-  if (response.stop_reason !== 'end_turn') return { ok: false, error: 'failed' };
+  if (response.stop_reason !== 'end_turn') {
+    return { ok: false, error: 'failed', detail: `Claude stopped with ${response.stop_reason}.` };
+  }
 
   return readSuggestions(response.content.find((block) => block.type === 'text')?.text);
 }

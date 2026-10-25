@@ -141,6 +141,11 @@ function SuggestDecisions({ inbox, suggestions }: { inbox: LoopRow[]; suggestion
           {status}
         </ThemedText>
       ) : null}
+      {suggestions.status === 'error' && suggestions.detail ? (
+        <ThemedText type="small" themeColor="textSecondary" selectable testID="suggest-detail">
+          Details: {suggestions.detail}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }

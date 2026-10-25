@@ -12,7 +12,8 @@ const STATUS: Record<SuggestError, number> = {
   failed: 502,
 };
 
-const error = (code: string, status: number) => Response.json({ error: code }, { status });
+const error = (code: string, status: number, detail?: string) =>
+  Response.json(detail ? { error: code, detail } : { error: code }, { status });
 
 export async function POST(request: Request) {
   if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) {
@@ -28,6 +29,6 @@ export async function POST(request: Request) {
   if (!parsed.ok) return error('invalid_request', 400);
 
   const result = await suggestDecisions(parsed.value);
-  if (!result.ok) return error(result.error, STATUS[result.error]);
+  if (!result.ok) return error(result.error, STATUS[result.error], result.detail);
   return Response.json(result.value);
 }

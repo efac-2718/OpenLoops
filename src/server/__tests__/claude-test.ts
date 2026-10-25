@@ -81,7 +81,7 @@ describe('suggestWithClaude', () => {
     ['JSON without suggestions', { content: [{ type: 'text', text: '{}' }] }, 'failed'],
   ])('reports %s', async (_, fields, error) => {
     mockCreate.mockResolvedValue(reply(fields));
-    await expect(suggestWithClaude(request, 'key')).resolves.toEqual({ ok: false, error });
+    await expect(suggestWithClaude(request, 'key')).resolves.toMatchObject({ ok: false, error });
   });
 
   test.each([
@@ -90,6 +90,6 @@ describe('suggestWithClaude', () => {
     ['any other failure', () => new Anthropic.APIError('500'), 'failed'],
   ])('reports %s', async (_, makeError, error) => {
     mockCreate.mockRejectedValue(makeError());
-    await expect(suggestWithClaude(request, 'key')).resolves.toEqual({ ok: false, error });
+    await expect(suggestWithClaude(request, 'key')).resolves.toMatchObject({ ok: false, error });
   });
 });

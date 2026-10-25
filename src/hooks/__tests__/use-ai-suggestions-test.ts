@@ -82,11 +82,11 @@ test('reports a failed request and keeps earlier suggestions', async () => {
     value: { suggestions: [{ id: 'a', decision: 'done', next_action: null, day: null, waiting_on: null, reason: '' }] },
   });
   await requestSuggestions([loop('a')], context);
-  mockFetchSuggestions.mockResolvedValueOnce({ ok: false, error: 'offline' });
+  mockFetchSuggestions.mockResolvedValueOnce({ ok: false, error: 'offline', detail: 'Network request failed' });
   await requestSuggestions([loop('b')], context);
 
   const state = current();
-  expect(state).toMatchObject({ status: 'error', error: 'offline' });
+  expect(state).toMatchObject({ status: 'error', error: 'offline', detail: 'Network request failed' });
   expect(suggestionFor(state, loop('a'))).not.toBeNull();
 });
 

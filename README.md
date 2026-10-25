@@ -156,7 +156,7 @@ Everything stays on the phone. **Settings → Your data** exports a copy through
 ## Known issues
 
 - **Tapping the nightly reminder doesn't open Tonight in Expo Go** (Android). It works in installed builds. The handling is in `useOpenCloseFromReminder` in `src/services/close-reminder.ts`.
-- **The Capture and Tonight shortcuts showed an error** in the first development build. Not investigated yet; check them in the preview build.
+- **The Capture and Tonight shortcuts showed an error in the first development build.** They work in the preview build.
 
 ## Cloud builds
 

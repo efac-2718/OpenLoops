@@ -1,4 +1,4 @@
-import { addDays, dayKey, revisitOptions, scheduleOptions, startOfDay } from '../dates';
+import { addDays, dayKey, parseDayKey, revisitOptions, scheduleOptions, startOfDay } from '../dates';
 
 const labelled = (options: { label: string; date: Date }[]) =>
   options.map(({ label, date }) => [label, date.toDateString()]);
@@ -78,4 +78,18 @@ describe('revisitOptions', () => {
       ['In a month', 'Fri Nov 27 2026'],
     ]);
   });
+});
+
+describe('parseDayKey', () => {
+  test('reads a day key back as local midnight', () => {
+    expect(parseDayKey('2026-10-28')).toEqual(new Date(2026, 9, 28));
+    expect(dayKey(parseDayKey('2026-01-05')!)).toBe('2026-01-05');
+  });
+
+  test.each(['2026-02-30', '2026-13-01', '26-10-28', '2026-10-28T10:00', 'tomorrow', ''])(
+    'rejects %j',
+    (key) => {
+      expect(parseDayKey(key)).toBeNull();
+    },
+  );
 });

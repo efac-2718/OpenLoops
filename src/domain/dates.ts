@@ -18,6 +18,16 @@ export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/** Reads a YYYY-MM-DD day key back as local midnight of that day, or null if it isn't a real day. */
+export function parseDayKey(key: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  const date = new Date(year, month - 1, day);
+  // Rejects days that roll over, such as 2026-02-30.
+  return dayKey(date) === key ? date : null;
+}
+
 export type QuickDate = { label: string; date: Date };
 
 const MONDAY = 1;

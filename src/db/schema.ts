@@ -61,3 +61,17 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
   updatedAt: timestamp('updated_at').notNull(),
 });
+
+/**
+ * AI suggestions for inbox loops, kept so they outlast the app closing. Only a
+ * cache on this phone: never exported, restored, or synced, so it skips the
+ * conventions above.
+ */
+export const aiSuggestions = sqliteTable('ai_suggestions', {
+  loopId: text('loop_id').primaryKey(),
+  /** The suggestion as the model wrote it, checked again whenever it's read (parseSuggestion). */
+  answer: text('answer').notNull(),
+  /** The loop's updated_at it was suggested for: an edited loop gets no stale suggestion. */
+  loopUpdatedAt: timestamp('loop_updated_at').notNull(),
+  createdAt: timestamp('created_at').notNull(),
+});

@@ -1,28 +1,29 @@
 /**
- * Suggested decisions for inbox loops, kept in memory while the app runs so the
- * Inbox and Decide screens share them. A suggestion belongs to the loop as
- * Claude saw it: once the loop is edited, it is no longer offered.
+ * AI suggestions for inbox loops. They're saved on the phone
+ * (src/db/suggestions.ts), so they outlast the app closing; how the latest
+ * request went is kept in memory. A suggestion belongs to the loop as the AI
+ * saw it: once the loop is edited, it is no longer offered.
  */
 
+import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useSyncExternalStore } from 'react';
 
 import type { LoopRow } from '@/db/loops';
-import { buildSortRequest, parseSuggestions, type Suggestion } from '@/domain/ai-sort';
-import { fetchSuggestions, type AiSortError } from '@/services/ai-sort';
-
-type Entry = { suggestion: Suggestion; loopUpdatedAt: number };
+import { clearSavedSuggestions, savedSuggestionsQuery, saveSuggestions } from '@/db/suggestions';
+import { buildSortRequest, parseSuggestions, readSavedSuggestion, type Suggestion } from '@/domain/ai-sort';
+import { callAi, type AiCallError } from '@/services/ai';
 
 export type AiSuggestions = {
   status: 'idle' | 'loading' | 'done' | 'error';
-  error: AiSortError | null;
+  error: AiCallError | null;
   /** The technical detail behind the last error, if any. */
   detail: string | null;
   /** How many suggestions the last request brought back. */
   received: number;
-  entries: ReadonlyMap<string, Entry>;
 };
 
-let state: AiSuggestions = { status: 'idle', error: null, detail: null, received: 0, entries: new Map() };
+const IDLE: AiSuggestions = { status: 'idle', error: null, detail: null, received: 0 };
+let state = IDLE;
 const listeners = new Set<() => void>();
 
 function update(changes: Partial<AiSuggestions>) {
@@ -35,7 +36,7 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-/** The current suggestions, outside React. */
+/** How the latest request went, outside React. */
 export function getAiSuggestions(): AiSuggestions {
   return state;
 }
@@ -44,20 +45,21 @@ export function useAiSuggestions(): AiSuggestions {
   return useSyncExternalStore(subscribe, getAiSuggestions, getAiSuggestions);
 }
 
-export function suggestionFor(
-  suggestions: AiSuggestions,
-  loop: Pick<LoopRow, 'id' | 'updatedAt'>,
-): Suggestion | null {
-  const entry = suggestions.entries.get(loop.id);
-  return entry && entry.loopUpdatedAt === loop.updatedAt.getTime() ? entry.suggestion : null;
+/** Looks up the saved suggestion for a loop, kept up to date as suggestions are saved or cleared. */
+export function useSavedSuggestions(): (loop: Pick<LoopRow, 'id' | 'updatedAt'>) => Suggestion | null {
+  const { data } = useLiveQuery(savedSuggestionsQuery());
+  const now = new Date();
+  const saved = new Map(data.map((row) => [row.loopId, row]));
+  return (loop) => readSavedSuggestion(saved.get(loop.id), loop, now);
 }
 
 /** Forgets every suggestion, for when AI suggestions are turned off. */
 export function clearSuggestions(): void {
-  update({ status: 'idle', error: null, detail: null, received: 0, entries: new Map() });
+  clearSavedSuggestions();
+  update(IDLE);
 }
 
-/** Asks for suggestions for the given loops (the first batch of them, oldest first). */
+/** Asks for suggestions for the given loops (the first batch of them, oldest first) and saves them. */
 export async function requestSuggestions(
   loops: LoopRow[],
   context: { activeCount: number; activeCap: number },
@@ -67,7 +69,7 @@ export async function requestSuggestions(
   const request = buildSortRequest(loops, { now, ...context });
   update({ status: 'loading', error: null, detail: null });
 
-  const result = await fetchSuggestions(request);
+  const result = await callAi('sort', request);
   if (!result.ok) {
     update({ status: 'error', error: result.error, detail: result.detail ?? null });
     return;
@@ -75,10 +77,13 @@ export async function requestSuggestions(
 
   const asked = new Map(loops.slice(0, request.loops.length).map((loop) => [loop.id, loop]));
   const suggestions = parseSuggestions(result.value, [...asked.keys()], now);
-  const entries = new Map(state.entries);
-  for (const suggestion of suggestions) {
-    const loop = asked.get(suggestion.loopId);
-    if (loop) entries.set(loop.id, { suggestion, loopUpdatedAt: loop.updatedAt.getTime() });
-  }
-  update({ status: 'done', received: suggestions.length, entries });
+  const answers = (result.value as { suggestions: { id: string }[] }).suggestions;
+  saveSuggestions(
+    suggestions.flatMap(({ loopId }) => {
+      const loop = asked.get(loopId);
+      const answer = answers.find((item) => item.id === loopId);
+      return loop && answer ? [{ loop, answer }] : [];
+    }),
+  );
+  update({ status: 'done', received: suggestions.length });
 }

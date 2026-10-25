@@ -15,6 +15,13 @@
       "when": 1792908279228,
       "tag": "0001_weekly_review",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792926143213,
+      "tag": "0002_ai_suggestions",
+      "breakpoints": true
     }
   ]
 }

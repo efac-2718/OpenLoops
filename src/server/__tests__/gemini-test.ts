@@ -1,19 +1,21 @@
-import type { SortRequest } from '@/domain/ai-sort';
+import type { AiTask } from '../ai-task';
+import { askGemini, GEMINI_MODELS } from '../gemini';
 
-import { GEMINI_MODELS, suggestWithGemini } from '../gemini';
-import { SUGGESTIONS_SCHEMA, SYSTEM_PROMPT } from '../sort-prompt';
+const suggestions = [{ id: 'a', reason: 'Quick call.' }];
+const SCHEMA = { type: 'object' };
 
-const request: SortRequest = {
-  today: '2026-10-28',
-  weekday: 'Wednesday',
-  activeCount: 3,
-  activeCap: 7,
-  loops: [{ id: 'a', title: 'Call the bank', notes: null, captured: '2026-10-26' }],
+// Any AI task: the answer is usable when it has a list of suggestions.
+const task: AiTask<{ suggestions: unknown[] }> = {
+  name: 'test',
+  size: 1,
+  system: 'You sort loops.',
+  input: 'Call the bank',
+  schema: SCHEMA,
+  read: (answer) => {
+    const list = (answer as { suggestions?: unknown } | null)?.suggestions;
+    return Array.isArray(list) ? { suggestions: list } : null;
+  },
 };
-
-const suggestions = [
-  { id: 'a', decision: 'next', next_action: 'Call the bank', day: null, waiting_on: null, reason: 'Quick call.' },
-];
 
 function answer(fields: Record<string, unknown> = {}) {
   return {
@@ -42,27 +44,23 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-test('asks the first model for JSON matching the suggestions schema, and reads its answer', async () => {
+test('asks the first model for JSON matching the task’s schema, and reads its answer', async () => {
   mockFetch.mockResolvedValue(respond(200, answer()));
 
-  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
+  await expect(askGemini(task, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
   expect(modelsAsked()).toEqual([GEMINI_MODELS[0]]);
   const [url, init] = mockFetch.mock.calls[0];
   expect(url).toBe(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELS[0]}:generateContent`);
   expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'x-goog-api-key': 'key' });
   expect(JSON.parse(init.body)).toEqual({
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [{ role: 'user', parts: [{ text: JSON.stringify(request) }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: SUGGESTIONS_SCHEMA,
-      maxOutputTokens: 8192,
-    },
+    systemInstruction: { parts: [{ text: 'You sort loops.' }] },
+    contents: [{ role: 'user', parts: [{ text: 'Call the bank' }] }],
+    generationConfig: { responseMimeType: 'application/json', responseJsonSchema: SCHEMA, maxOutputTokens: 8192 },
   });
 });
 
 test('needs an API key', async () => {
-  await expect(suggestWithGemini(request, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
+  await expect(askGemini(task, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
   expect(mockFetch).not.toHaveBeenCalled();
 });
 
@@ -72,10 +70,11 @@ test.each([
   ['not offered', respond(404, { error: { message: 'Model not found' } })],
   ['cut short', respond(200, answer({ candidates: [{ finishReason: 'MAX_TOKENS' }] }))],
   ['unreadable', respond(200, answer({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{' }] } }] }))],
+  ['unusable', respond(200, answer({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{}' }] } }] }))],
 ])('asks the next model when one is %s', async (_, firstReply) => {
   mockFetch.mockResolvedValueOnce(firstReply).mockResolvedValueOnce(respond(200, answer()));
 
-  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
+  await expect(askGemini(task, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
   expect(modelsAsked()).toEqual(GEMINI_MODELS.slice(0, 2));
 });
 
@@ -88,7 +87,7 @@ test('asks the next model when one doesn’t answer in 25 seconds', async () => 
     )
     .mockResolvedValueOnce(respond(200, answer()));
 
-  const result = suggestWithGemini(request, 'key');
+  const result = askGemini(task, 'key');
   await jest.advanceTimersByTimeAsync(25_000);
   await expect(result).resolves.toEqual({ ok: true, value: { suggestions } });
   jest.useRealTimers();
@@ -97,7 +96,7 @@ test('asks the next model when one doesn’t answer in 25 seconds', async () => 
 test('says it is busy when every model is unavailable, and which', async () => {
   mockFetch.mockResolvedValue(respond(503, OVERLOADED));
 
-  const result = await suggestWithGemini(request, 'key');
+  const result = await askGemini(task, 'key');
   expect(modelsAsked()).toEqual(GEMINI_MODELS);
   expect(result).toMatchObject({ ok: false, error: 'busy' });
   expect(!result.ok && result.detail).toContain(`${GEMINI_MODELS[0]} 503: This model is currently experiencing high demand.`);
@@ -112,13 +111,13 @@ test.each([
 ])('stops at %s, since another model wouldn’t help', async (_, reply, error) => {
   mockFetch.mockResolvedValue(reply);
 
-  await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
+  await expect(askGemini(task, 'key')).resolves.toMatchObject({ ok: false, error });
   expect(mockFetch).toHaveBeenCalledTimes(1);
 });
 
 test('describes a network failure, without the key', async () => {
   mockFetch.mockRejectedValue(new TypeError('connection to key-123 failed'));
-  await expect(suggestWithGemini(request, 'key-123')).resolves.toEqual({
+  await expect(askGemini(task, 'key-123')).resolves.toEqual({
     ok: false,
     error: 'failed',
     detail: 'Gemini: TypeError: connection to [key] failed',

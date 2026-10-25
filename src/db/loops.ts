@@ -113,12 +113,14 @@ export function keepLoop(id: string): Result<Pick<LoopRow, 'reviewedAt' | 'updat
 }
 
 /** Captures several thoughts at once, all or none, in the order given. */
-export function captureLoops(titles: string[]): Result<LoopRow[], rules.CaptureError> {
+export function captureLoops(
+  thoughts: { title: string; notes?: string | null }[],
+): Result<LoopRow[], rules.CaptureError> {
   const now = Date.now();
   const captured: LoopRow[] = [];
-  for (const [index, title] of titles.entries()) {
+  for (const [index, { title, notes }] of thoughts.entries()) {
     // A millisecond apart, so the inbox (oldest first) keeps the order they were said in.
-    const result = rules.captureLoop(title, { id: randomUUID(), now: new Date(now + index) });
+    const result = rules.captureLoop(title, { id: randomUUID(), now: new Date(now + index), notes });
     if (!result.ok) return result;
     captured.push(result.value);
   }

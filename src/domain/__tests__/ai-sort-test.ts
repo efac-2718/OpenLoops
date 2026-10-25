@@ -2,6 +2,7 @@ import {
   buildSortRequest,
   MAX_LOOPS_PER_SORT,
   parseSuggestions,
+  readSavedSuggestion,
   validateSortRequest,
   type SortRequest,
 } from '../ai-sort';
@@ -139,5 +140,38 @@ describe('parseSuggestions', () => {
 
   test.each([null, 'text', {}, { suggestions: 'no' }])('reads %j as no suggestions', (answer) => {
     expect(parseSuggestions(answer, asked, now)).toEqual([]);
+  });
+});
+
+describe('readSavedSuggestion', () => {
+  const loop = { id: 'a', updatedAt: new Date(2026, 9, 26, 9) };
+  const saved = (answer: object, loopUpdatedAt = loop.updatedAt) => ({
+    loopId: 'a',
+    answer: JSON.stringify({ id: 'a', next_action: null, day: null, waiting_on: null, reason: 'Why.', ...answer }),
+    loopUpdatedAt,
+  });
+
+  test('reads a saved suggestion back for the same version of the loop', () => {
+    expect(readSavedSuggestion(saved({ decision: 'next', next_action: 'Email Sam' }), loop, now)).toEqual({
+      loopId: 'a',
+      decision: { kind: 'next', nextAction: 'Email Sam' },
+      reason: 'Why.',
+    });
+  });
+
+  test('drops it once the loop has been edited', () => {
+    const edited = { ...loop, updatedAt: new Date(2026, 9, 27) };
+    expect(readSavedSuggestion(saved({ decision: 'done' }), edited, now)).toBeNull();
+  });
+
+  test('drops a suggested day that has since passed', () => {
+    const old = saved({ decision: 'thinking', day: '2026-10-27' });
+    expect(readSavedSuggestion(old, loop, now)).toBeNull();
+  });
+
+  test('drops a damaged or mismatched record', () => {
+    expect(readSavedSuggestion(undefined, loop, now)).toBeNull();
+    expect(readSavedSuggestion({ ...saved({ decision: 'done' }), answer: '{' }, loop, now)).toBeNull();
+    expect(readSavedSuggestion({ ...saved({ decision: 'done' }), loopId: 'b' }, loop, now)).toBeNull();
   });
 });

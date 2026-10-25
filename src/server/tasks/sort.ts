@@ -1,21 +1,8 @@
-/**
- * Server-only: what every AI service is asked, and how its answer is read.
- * The services themselves are in claude.ts and gemini.ts.
- */
+/** Server-only: AI sorting, a suggested decision for each inbox loop (POST /api/sort). */
 
-import { DECISION_KINDS, type RawSuggestion } from '@/domain/ai-sort';
+import { DECISION_KINDS, type RawSuggestion, type SortRequest } from '@/domain/ai-sort';
 
-export type SuggestError = 'not_configured' | 'busy' | 'refused' | 'failed';
-/** A failure can carry a short technical detail, passed to the app so a problem can be diagnosed from the phone. */
-export type SuggestResult =
-  | { ok: true; value: { suggestions: RawSuggestion[] } }
-  | { ok: false; error: SuggestError; detail?: string };
-
-/** One line describing an error, with the API key blanked out in case it ever appears. */
-export function describeFailure(error: unknown, apiKey: string): string {
-  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  return text.split(apiKey).join('[key]').replace(/\s+/g, ' ').slice(0, 300);
-}
+import type { AiTask } from '../ai-task';
 
 const nullableText = { anyOf: [{ type: 'string' }, { type: 'null' }] };
 
@@ -43,7 +30,7 @@ export const SUGGESTIONS_SCHEMA = {
   additionalProperties: false,
 };
 
-export const SYSTEM_PROMPT = `You help someone use Open Loops, an app for getting things off their mind, based on Getting Things Done. Each loop in their inbox is something on their mind that has no decision yet. Unmade decisions keep nagging at people; a concrete plan lets them stop thinking about it. Suggest one decision per loop:
+export const SORT_PROMPT = `You help someone use Open Loops, an app for getting things off their mind, based on Getting Things Done. Each loop in their inbox is something on their mind that has no decision yet. Unmade decisions keep nagging at people; a concrete plan lets them stop thinking about it. Suggest one decision per loop:
 
 - done: it takes about two minutes, so they should just do it now.
 - next: one concrete next step they can take whenever they have time. Write it in next_action.
@@ -60,15 +47,17 @@ Next, scheduled and waiting loops are active, and the person can have at most ac
 
 The reason is one short sentence they can take in at a glance. Return a suggestion for every loop, with its id.`;
 
-/** Reads the JSON answer. Each suggestion is checked again in the app (parseSuggestions). */
-export function readSuggestions(text: string | undefined): SuggestResult {
-  try {
-    const parsed = JSON.parse(text ?? '') as { suggestions?: unknown };
-    if (!Array.isArray(parsed.suggestions)) {
-      return { ok: false, error: 'failed', detail: 'The answer had no list of suggestions.' };
-    }
-    return { ok: true, value: { suggestions: parsed.suggestions as RawSuggestion[] } };
-  } catch {
-    return { ok: false, error: 'failed', detail: 'The answer wasn’t valid JSON.' };
-  }
+export function sortTask(request: SortRequest): AiTask<{ suggestions: RawSuggestion[] }> {
+  return {
+    name: 'sort',
+    size: request.loops.length,
+    system: SORT_PROMPT,
+    input: JSON.stringify(request),
+    schema: SUGGESTIONS_SCHEMA,
+    // Each suggestion is checked in the app (parseSuggestions); here, only the list.
+    read: (answer) => {
+      const suggestions = (answer as { suggestions?: unknown } | null)?.suggestions;
+      return Array.isArray(suggestions) ? { suggestions: suggestions as RawSuggestion[] } : null;
+    },
+  };
 }

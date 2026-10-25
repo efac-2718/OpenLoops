@@ -102,26 +102,58 @@ export function parseSuggestions(answer: unknown, askedIds: string[], now: Date)
   const items = (answer as { suggestions?: unknown } | null)?.suggestions;
   if (!Array.isArray(items)) return [];
 
+  const remaining = new Set(askedIds);
+  const suggestions: Suggestion[] = [];
+  for (const item of items) {
+    const suggestion = parseSuggestion(item, now);
+    if (!suggestion || !remaining.has(suggestion.loopId)) continue;
+    remaining.delete(suggestion.loopId);
+    suggestions.push(suggestion);
+  }
+  return suggestions;
+}
+
+/**
+ * One suggestion as the model wrote it, or null if it wouldn't make a valid
+ * decision today. Saved suggestions are read through this too, so one for a day
+ * that has since passed is no longer offered.
+ */
+export function parseSuggestion(item: unknown, now: Date): Suggestion | null {
+  if (typeof item !== 'object' || item === null) return null;
+  const raw = item as Record<string, unknown>;
+  const loopId = text(raw.id);
+  if (!loopId) return null;
+
   const today = startOfDay(now);
   const day = (value: unknown): Date | null => {
     const date = parseDayKey(text(value));
     return date && date >= today ? date : null;
   };
+  const decision = toDecision(raw, day);
+  return decision ? { loopId, decision, reason: text(raw.reason) } : null;
+}
 
-  const remaining = new Set(askedIds);
-  const suggestions: Suggestion[] = [];
-  for (const item of items) {
-    if (typeof item !== 'object' || item === null) continue;
-    const raw = item as Record<string, unknown>;
-    const loopId = text(raw.id);
-    if (!remaining.has(loopId)) continue;
+/** A suggestion saved on the phone: the answer as the model wrote it, and the loop version it was for. */
+export type SavedSuggestion = { loopId: string; answer: string; loopUpdatedAt: Date };
 
-    const decision = toDecision(raw, day);
-    if (!decision) continue;
-    remaining.delete(loopId);
-    suggestions.push({ loopId, decision, reason: text(raw.reason) });
+/**
+ * A saved suggestion for the loop as it is now, or null once the loop has been
+ * edited or the suggestion no longer makes a valid decision.
+ */
+export function readSavedSuggestion(
+  saved: SavedSuggestion | undefined,
+  loop: Pick<Loop, 'id' | 'updatedAt'>,
+  now: Date,
+): Suggestion | null {
+  if (!saved || saved.loopId !== loop.id || saved.loopUpdatedAt.getTime() !== loop.updatedAt.getTime()) {
+    return null;
   }
-  return suggestions;
+  try {
+    const suggestion = parseSuggestion(JSON.parse(saved.answer), now);
+    return suggestion?.loopId === loop.id ? suggestion : null;
+  } catch {
+    return null;
+  }
 }
 
 function toDecision(raw: Record<string, unknown>, day: (value: unknown) => Date | null): Decision | null {

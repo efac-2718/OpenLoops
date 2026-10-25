@@ -5,15 +5,17 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
+import { MakeConcrete } from '@/components/make-concrete';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { AI_SERVICE } from '@/constants/ai';
+import { AI_SERVER_ORIGIN, AI_SERVICE } from '@/constants/ai';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { decideLoop, editLoop, loopQuery, type LoopRow } from '@/db/loops';
+import { savedSuggestionFor } from '@/db/suggestions';
 import { revisitOptions, scheduleOptions, type QuickDate } from '@/domain/dates';
 import type { CaptureError, Decision, DecisionError, DecisionKind } from '@/domain/loop';
-import { suggestionFor, useAiSuggestions } from '@/hooks/use-ai-suggestions';
+import { useAiSuggestionsEnabled } from '@/hooks/use-settings';
 import { useTheme } from '@/hooks/use-theme';
 import { describeDecision } from '@/utils/describe-loop';
 import { timeAgo } from '@/utils/time-ago';
@@ -90,9 +92,8 @@ export default function DecideScreen() {
 
 function DecideForm({ loop }: { loop: LoopRow }) {
   const [now] = useState(() => new Date());
-  const suggestions = useAiSuggestions();
-  // An AI suggestion fills the form in; nothing is decided until the person confirms.
-  const [suggestion] = useState(() => (loop.state === 'inbox' ? suggestionFor(suggestions, loop) : null));
+  // A saved AI suggestion fills the form in; nothing is decided until the person confirms.
+  const [suggestion] = useState(() => (loop.state === 'inbox' ? savedSuggestionFor(loop, now) : null));
   const suggested = suggestion?.decision;
   const [kind, setKind] = useState<DecisionKind | null>(suggested?.kind ?? null);
   // Text carries over when changing a decision, e.g. rescheduling keeps the next action.
@@ -109,6 +110,7 @@ function DecideForm({ loop }: { loop: LoopRow }) {
     suggested?.kind === 'thinking' ? suggested.revisitAt : null,
   );
   const [error, setError] = useState<string | null>(null);
+  const aiEnabled = useAiSuggestionsEnabled() && AI_SERVER_ORIGIN !== null;
 
   const undecided = loop.state === 'inbox';
   const options = undecided
@@ -205,6 +207,9 @@ function DecideForm({ loop }: { loop: LoopRow }) {
                     submitBehavior="blurAndSubmit"
                     autoFocus={!suggestion}
                   />
+                ) : null}
+                {aiEnabled && (option.kind === 'next' || option.kind === 'scheduled') ? (
+                  <MakeConcrete loop={loop} nextAction={nextAction} onChange={edit(setNextAction)} />
                 ) : null}
                 {option.kind === 'scheduled' ? (
                   <DayPicker

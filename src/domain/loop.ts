@@ -103,7 +103,7 @@ export function isClosed(state: LoopState): boolean {
 
 export function captureLoop(
   title: string,
-  { id, now }: { id: string; now: Date },
+  { id, now, notes }: { id: string; now: Date; notes?: string | null },
 ): Result<Loop, CaptureError> {
   const trimmed = title.trim();
   if (!trimmed) return fail('empty_title');
@@ -111,7 +111,7 @@ export function captureLoop(
   return ok({
     id,
     title: trimmed,
-    notes: null,
+    notes: notes?.trim() || null,
     state: 'inbox',
     nextAction: null,
     dueAt: null,

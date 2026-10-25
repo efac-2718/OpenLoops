@@ -44,6 +44,13 @@ describe('captureLoop', () => {
   test.each(['', '   ', '\n\t'])('rejects an empty title %j', (title) => {
     expect(captureLoop(title, { id: 'a', now })).toEqual({ ok: false, error: 'empty_title' });
   });
+
+  test('can start with notes, trimmed; blank notes are none', () => {
+    const withNotes = captureLoop('Fix the bike', { id: 'a', now, notes: ' before the weekend ' });
+    expect(withNotes.ok && withNotes.value.notes).toBe('before the weekend');
+    const blank = captureLoop('Fix the bike', { id: 'a', now, notes: '  ' });
+    expect(blank.ok && blank.value.notes).toBeNull();
+  });
 });
 
 describe('editLoop', () => {

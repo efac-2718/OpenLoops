@@ -16,12 +16,13 @@ import { activeQuery, inboxQuery, type LoopRow } from '@/db/loops';
 import { MAX_LOOPS_PER_SORT } from '@/domain/ai-sort';
 import {
   requestSuggestions,
-  suggestionFor,
   useAiSuggestions,
+  useSavedSuggestions,
   type AiSuggestions,
 } from '@/hooks/use-ai-suggestions';
 import { useActiveCap, useAiSuggestionsEnabled } from '@/hooks/use-settings';
-import type { AiSortError } from '@/services/ai-sort';
+import type { Suggestion } from '@/domain/ai-sort';
+import { aiErrorMessage } from '@/utils/ai-messages';
 import { loopCount, loopsNeed } from '@/utils/plural';
 import { timeAgo } from '@/utils/time-ago';
 
@@ -29,6 +30,7 @@ export default function InboxScreen() {
   const { data: inbox } = useLiveQuery(inboxQuery());
   const aiEnabled = useAiSuggestionsEnabled();
   const suggestions = useAiSuggestions();
+  const suggestionFor = useSavedSuggestions();
   const now = new Date();
 
   return (
@@ -47,7 +49,7 @@ export default function InboxScreen() {
                   : null}
               </ScreenHeader>
               {aiEnabled && inbox.length > 0 ? (
-                <SuggestDecisions inbox={inbox} suggestions={suggestions} />
+                <SuggestDecisions inbox={inbox} suggestions={suggestions} suggestionFor={suggestionFor} />
               ) : null}
             </>
           }
@@ -67,7 +69,7 @@ export default function InboxScreen() {
           }
           ItemSeparatorComponent={Separator}
           renderItem={({ item, index }) => {
-            const suggestion = aiEnabled ? suggestionFor(suggestions, item) : null;
+            const suggestion = aiEnabled ? suggestionFor(item) : null;
             return (
               <LoopCard
                 testID={`inbox-row-${index}`}
@@ -89,26 +91,23 @@ export default function InboxScreen() {
   );
 }
 
-const SORT_ERRORS: Record<AiSortError, string> = {
-  unavailable: 'AI suggestions aren’t available in this version of the app.',
-  offline: 'Couldn’t reach the AI server. Check your connection and try again.',
-  not_configured: 'The AI server isn’t set up yet: its API key is missing or not working.',
-  busy: 'The AI service is busy or has reached its daily limit. Try again later.',
-  refused: `${AI_SERVICE.name} declined to suggest decisions for these loops.`,
-  failed: 'Something went wrong getting suggestions. Try again.',
+type SuggestDecisionsProps = {
+  inbox: LoopRow[];
+  suggestions: AiSuggestions;
+  suggestionFor: (loop: LoopRow) => Suggestion | null;
 };
 
-function SuggestDecisions({ inbox, suggestions }: { inbox: LoopRow[]; suggestions: AiSuggestions }) {
+function SuggestDecisions({ inbox, suggestions, suggestionFor }: SuggestDecisionsProps) {
   const { data: active } = useLiveQuery(activeQuery());
   const activeCap = useActiveCap();
-  const pending = inbox.filter((loop) => !suggestionFor(suggestions, loop));
+  const pending = inbox.filter((loop) => !suggestionFor(loop));
   const loading = suggestions.status === 'loading';
 
   let status: string | null = null;
   if (loading) {
     status = `${AI_SERVICE.name} is looking at ${loopCount(Math.min(pending.length, MAX_LOOPS_PER_SORT))}…`;
   } else if (suggestions.status === 'error' && suggestions.error) {
-    status = SORT_ERRORS[suggestions.error];
+    status = aiErrorMessage(suggestions.error);
   } else if (suggestions.status === 'done') {
     status =
       suggestions.received > 0

@@ -1,7 +1,5 @@
-import type { SortRequest } from '@/domain/ai-sort';
-
-import { suggestWithClaude } from '../claude';
-import { SUGGESTIONS_SCHEMA } from '../sort-prompt';
+import type { AiTask } from '../ai-task';
+import { askClaude } from '../claude';
 
 const mockCreate = jest.fn();
 
@@ -22,17 +20,21 @@ jest.mock('@anthropic-ai/sdk', () => {
 
 const Anthropic = jest.requireMock('@anthropic-ai/sdk').default;
 
-const request: SortRequest = {
-  today: '2026-10-28',
-  weekday: 'Wednesday',
-  activeCount: 3,
-  activeCap: 7,
-  loops: [{ id: 'a', title: 'Call the bank', notes: null, captured: '2026-10-26' }],
-};
+const suggestions = [{ id: 'a', reason: 'Quick call.' }];
+const SCHEMA = { type: 'object' };
 
-const suggestions = [
-  { id: 'a', decision: 'next', next_action: 'Call the bank', day: null, waiting_on: null, reason: 'Quick call.' },
-];
+// Any AI task: the answer is usable when it has a list of suggestions.
+const task: AiTask<{ suggestions: unknown[] }> = {
+  name: 'test',
+  size: 1,
+  system: 'You sort loops.',
+  input: 'Call the bank',
+  schema: SCHEMA,
+  read: (answer) => {
+    const list = (answer as { suggestions?: unknown } | null)?.suggestions;
+    return Array.isArray(list) ? { suggestions: list } : null;
+  },
+};
 
 function reply(fields: Record<string, unknown> = {}) {
   return {
@@ -53,24 +55,25 @@ beforeEach(() => {
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-describe('suggestWithClaude', () => {
-  test('asks Claude Opus 5.5 for schema-shaped suggestions, with refusal fallback', async () => {
+describe('askClaude', () => {
+  test('asks Claude Opus 5.5 for JSON matching the task’s schema, with refusal fallback', async () => {
     mockCreate.mockResolvedValue(reply());
 
-    await expect(suggestWithClaude(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
+    await expect(askClaude(task, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-opus-5-5',
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: SUGGESTIONS_SCHEMA } },
-        messages: [{ role: 'user', content: JSON.stringify(request) }],
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+        system: 'You sort loops.',
+        messages: [{ role: 'user', content: 'Call the bank' }],
       }),
     );
   });
 
   test('needs an API key', async () => {
-    await expect(suggestWithClaude(request, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
+    await expect(askClaude(task, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -78,10 +81,10 @@ describe('suggestWithClaude', () => {
     ['a refusal', { stop_reason: 'refusal', content: [] }, 'refused'],
     ['running out of tokens', { stop_reason: 'max_tokens' }, 'failed'],
     ['text that is not JSON', { content: [{ type: 'text', text: 'Sure!' }] }, 'failed'],
-    ['JSON without suggestions', { content: [{ type: 'text', text: '{}' }] }, 'failed'],
+    ['an answer the task can’t use', { content: [{ type: 'text', text: '{}' }] }, 'failed'],
   ])('reports %s', async (_, fields, error) => {
     mockCreate.mockResolvedValue(reply(fields));
-    await expect(suggestWithClaude(request, 'key')).resolves.toMatchObject({ ok: false, error });
+    await expect(askClaude(task, 'key')).resolves.toMatchObject({ ok: false, error });
   });
 
   test.each([
@@ -90,6 +93,6 @@ describe('suggestWithClaude', () => {
     ['any other failure', () => new Anthropic.APIError('500'), 'failed'],
   ])('reports %s', async (_, makeError, error) => {
     mockCreate.mockRejectedValue(makeError());
-    await expect(suggestWithClaude(request, 'key')).resolves.toMatchObject({ ok: false, error });
+    await expect(askClaude(task, 'key')).resolves.toMatchObject({ ok: false, error });
   });
 });

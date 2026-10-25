@@ -1,9 +1,10 @@
 /**
- * Where the AI server (src/app/api, deployed to EAS Hosting) lives. Null until
- * it's deployed; AI suggestions stay hidden until then. Set
- * EXPO_PUBLIC_AI_SERVER_ORIGIN to point a local build somewhere else.
+ * Where the AI server (src/app/api) lives: its EAS Hosting production address.
+ * Set EXPO_PUBLIC_AI_SERVER_ORIGIN to point a local build somewhere else. With
+ * no address, AI suggestions stay hidden.
  */
-export const AI_SERVER_ORIGIN: string | null = process.env.EXPO_PUBLIC_AI_SERVER_ORIGIN || null;
+export const AI_SERVER_ORIGIN: string | null =
+  process.env.EXPO_PUBLIC_AI_SERVER_ORIGIN || 'https://open-loops.expo.app';
 
 export type AiProvider = 'gemini' | 'claude';
 

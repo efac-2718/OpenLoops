@@ -168,7 +168,7 @@ How it works:
 - The app checks every suggestion (`parseSuggestions`) and drops anything that wouldn't be a valid decision, such as a day in the past or a next action with no action.
 - The API key lives only on the server, as an EAS environment variable in the production environment with **Sensitive** visibility (EAS Hosting can't use Secret variables): `GEMINI_API_KEY` (from Google AI Studio) or `ANTHROPIC_API_KEY` (from the Anthropic Console). The app's bundle never contains either.
 - `.eas/workflows/deploy-api.yml` deploys the endpoint to EAS Hosting on every push to `main`. `app.config.js` switches `web.output` to `server` for that export only, so the app's fingerprint runtime version doesn't change and the feature can ship as an over-the-air update.
-- `src/constants/ai.ts` holds the server's address. AI suggestions stay hidden until it's set.
+- The server runs at `https://open-loops.expo.app` (set in `src/constants/ai.ts`). Its logs, requests and crashes are on the EAS Hosting dashboard.
 
 To switch to Claude: add `ANTHROPIC_API_KEY` as above, set `AI_PROVIDER` to `'claude'`, and push to `main`. That redeploys the server and sends the app an update. With Claude, a sort of 20 loops costs a few US cents; set a monthly spend limit in the Anthropic Console.
 

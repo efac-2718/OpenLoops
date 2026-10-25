@@ -1,0 +1,11 @@
+# Times Gemini API calls from Expo's cloud with the production GEMINI_API_KEY. Run by hand.
+name: Diagnose Gemini
+
+jobs:
+  diagnose:
+    name: Time Gemini calls
+    environment: production
+    steps:
+      - uses: eas/checkout
+      - name: Call Gemini
+        run: bash scripts/diagnose/gemini.sh

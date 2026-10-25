@@ -59,6 +59,8 @@ describe('decide: leaving the inbox', () => {
         revisitAt: null,
         closedAt: now,
         updatedAt: now,
+        decidedAt: now,
+        reviewedAt: now,
       },
     });
   });

@@ -8,6 +8,7 @@ import { randomUUID } from 'expo-crypto';
 
 import * as rules from '@/domain/loop';
 import type { Decision, DecisionChanges, DecisionError, Result } from '@/domain/loop';
+import { keep, type KeepError } from '@/domain/review';
 
 import { getDb } from './client';
 import { loops } from './schema';
@@ -39,7 +40,7 @@ export function activeQuery() {
     .select()
     .from(loops)
     .where(and(inArray(loops.state, [...rules.ACTIVE_STATES]), notDeleted))
-    .orderBy(asc(loops.dueAt), asc(loops.updatedAt));
+    .orderBy(asc(loops.dueAt), asc(loops.decidedAt));
 }
 
 export function thinkingQuery() {
@@ -47,7 +48,7 @@ export function thinkingQuery() {
     .select()
     .from(loops)
     .where(and(eq(loops.state, 'thinking'), notDeleted))
-    .orderBy(asc(loops.revisitAt), asc(loops.updatedAt));
+    .orderBy(asc(loops.revisitAt), asc(loops.decidedAt));
 }
 
 /** The only states that can need attention at the nightly close (see rules.attentionReason). */
@@ -76,6 +77,24 @@ export function captureLoop(title: string): Result<LoopRow, rules.CaptureError> 
     getDb().insert(loops).values(result.value).run();
   }
   return result;
+}
+
+/** Confirms during a review that a loop's decision still holds. */
+export function keepLoop(id: string): Result<Pick<LoopRow, 'reviewedAt' | 'updatedAt'>, KeepError | 'not_found'> {
+  return getDb().transaction((tx) => {
+    const loop = tx
+      .select()
+      .from(loops)
+      .where(and(eq(loops.id, id), notDeleted))
+      .get();
+    if (!loop) return { ok: false, error: 'not_found' } as const;
+
+    const result = keep(loop, new Date());
+    if (result.ok) {
+      tx.update(loops).set(result.value).where(eq(loops.id, id)).run();
+    }
+    return result;
+  });
 }
 
 /** Captures several thoughts at once, all or none, in the order given. */

@@ -36,6 +36,10 @@ export type Loop = {
   revisitAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** When the current decision was made; null while in the inbox. */
+  decidedAt: Date | null;
+  /** When the user last looked at this loop and confirmed or changed it. */
+  reviewedAt: Date | null;
   closedAt: Date | null;
   deletedAt: Date | null;
 };
@@ -62,10 +66,19 @@ export type DecisionError =
 /**
  * The fields a decision writes. Every decision sets all of them, so nothing
  * from a previous state survives (a loop moved to "thinking" has no due date).
+ * Deciding also counts as reviewing the loop.
  */
 export type DecisionChanges = Pick<
   Loop,
-  'state' | 'nextAction' | 'dueAt' | 'waitingOn' | 'revisitAt' | 'closedAt' | 'updatedAt'
+  | 'state'
+  | 'nextAction'
+  | 'dueAt'
+  | 'waitingOn'
+  | 'revisitAt'
+  | 'closedAt'
+  | 'updatedAt'
+  | 'decidedAt'
+  | 'reviewedAt'
 >;
 
 export type DecisionContext = {
@@ -106,6 +119,8 @@ export function captureLoop(
     revisitAt: null,
     createdAt: now,
     updatedAt: now,
+    decidedAt: null,
+    reviewedAt: null,
     closedAt: null,
     deletedAt: null,
   });
@@ -127,6 +142,8 @@ export function decide(
     revisitAt: null,
     closedAt: null,
     updatedAt: now,
+    decidedAt: now,
+    reviewedAt: now,
   };
   // Moving between active states doesn't change the count, so only check the cap on the way in.
   const overCap = () => !isActive(loop.state) && activeCount >= activeCap;

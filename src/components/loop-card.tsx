@@ -13,10 +13,20 @@ type LoopCardProps = {
   onPress: () => void;
   /** Shown at the trailing edge, such as a "Decide" label or a "Done" button. */
   action?: ReactNode;
+  /** Shown under the text, such as a row of buttons. */
+  footer?: ReactNode;
   testID?: string;
 };
 
-export function LoopCard({ title, detail, detailColor, onPress, action, testID }: LoopCardProps) {
+export function LoopCard({
+  title,
+  detail,
+  detailColor,
+  onPress,
+  action,
+  footer,
+  testID,
+}: LoopCardProps) {
   const theme = useTheme();
 
   return (
@@ -29,13 +39,16 @@ export function LoopCard({ title, detail, detailColor, onPress, action, testID }
         { backgroundColor: theme.backgroundElement },
         pressed && styles.pressed,
       ]}>
-      <View style={styles.text}>
-        <ThemedText>{title}</ThemedText>
-        <ThemedText type="small" themeColor={detailColor ?? 'textSecondary'}>
-          {detail}
-        </ThemedText>
+      <View style={styles.row}>
+        <View style={styles.text}>
+          <ThemedText>{title}</ThemedText>
+          <ThemedText type="small" themeColor={detailColor ?? 'textSecondary'}>
+            {detail}
+          </ThemedText>
+        </View>
+        {action}
       </View>
-      {action}
+      {footer}
     </Pressable>
   );
 }
@@ -77,11 +90,14 @@ export function CardAction({ label, onPress, testID }: CardActionProps) {
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.three,
     borderRadius: Spacing.three,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
   },
   text: {
     flex: 1,

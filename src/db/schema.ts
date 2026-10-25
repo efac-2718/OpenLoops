@@ -25,6 +25,8 @@ export const loops = sqliteTable(
     revisitAt: timestamp('revisit_at'),
     createdAt: timestamp('created_at').notNull(),
     updatedAt: timestamp('updated_at').notNull(),
+    decidedAt: timestamp('decided_at'),
+    reviewedAt: timestamp('reviewed_at'),
     closedAt: timestamp('closed_at'),
     deletedAt: timestamp('deleted_at'),
   },
@@ -37,6 +39,18 @@ export const dailyCloses = sqliteTable('daily_closes', {
   /** Local calendar day of the close, as YYYY-MM-DD. */
   day: text('day').notNull(),
   resolvedCount: integer('resolved_count').notNull(),
+  createdAt: timestamp('created_at').notNull(),
+  updatedAt: timestamp('updated_at').notNull(),
+  deletedAt: timestamp('deleted_at'),
+});
+
+/** One row per weekly review; completed_at stays null while one is in progress. */
+export const weeklyReviews = sqliteTable('weekly_reviews', {
+  id: text('id').primaryKey(),
+  startedAt: timestamp('started_at').notNull(),
+  completedAt: timestamp('completed_at'),
+  /** How many loops were kept, changed, finished, or dropped during the review. */
+  reviewedCount: integer('reviewed_count'),
   createdAt: timestamp('created_at').notNull(),
   updatedAt: timestamp('updated_at').notNull(),
   deletedAt: timestamp('deleted_at'),

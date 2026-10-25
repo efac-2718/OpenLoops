@@ -10,10 +10,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { activeQuery, decideLoop, type LoopRow } from '@/db/loops';
-import { attentionReason } from '@/domain/loop';
 import { useActiveCap } from '@/hooks/use-settings';
-import { formatDay, formatDayInline } from '@/utils/describe-loop';
-import { timeAgo } from '@/utils/time-ago';
+import { loopCardText } from '@/utils/describe-loop';
 
 type Section = { title: string; data: LoopRow[] };
 
@@ -65,49 +63,23 @@ export default function ActiveScreen() {
 }
 
 function ActiveCard({ loop, now, testID }: { loop: LoopRow; now: Date; testID: string }) {
-  const open = () => router.push({ pathname: '/decide/[id]', params: { id: loop.id } });
-  const done = <CardAction label="Done" testID={`${testID}-done`} onPress={() => decideLoop(loop.id, { kind: 'done' })} />;
-
-  switch (loop.state) {
-    case 'scheduled': {
-      const overdue = loop.dueAt !== null && attentionReason(loop, now) === 'overdue';
-      const day = loop.dueAt
-        ? overdue
-          ? `Overdue since ${formatDayInline(loop.dueAt, now)}`
-          : formatDay(loop.dueAt, now)
-        : '';
-      return (
-        <LoopCard
-          testID={testID}
-          title={loop.nextAction ?? loop.title}
-          detail={`${day} · ${loop.title}`}
-          detailColor={overdue ? 'danger' : undefined}
-          onPress={open}
-          action={done}
+  const { title, detail, overdue } = loopCardText(loop, now);
+  return (
+    <LoopCard
+      testID={testID}
+      title={title}
+      detail={detail}
+      detailColor={overdue ? 'danger' : undefined}
+      onPress={() => router.push({ pathname: '/decide/[id]', params: { id: loop.id } })}
+      action={
+        <CardAction
+          label="Done"
+          testID={`${testID}-done`}
+          onPress={() => decideLoop(loop.id, { kind: 'done' })}
         />
-      );
-    }
-    case 'waiting':
-      return (
-        <LoopCard
-          testID={testID}
-          title={loop.title}
-          detail={`Waiting on ${loop.waitingOn} · since ${timeAgo(loop.updatedAt, now)}`}
-          onPress={open}
-          action={done}
-        />
-      );
-    default:
-      return (
-        <LoopCard
-          testID={testID}
-          title={loop.nextAction ?? loop.title}
-          detail={loop.title}
-          onPress={open}
-          action={done}
-        />
-      );
-  }
+      }
+    />
+  );
 }
 
 function Separator() {

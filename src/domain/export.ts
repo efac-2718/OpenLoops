@@ -12,6 +12,14 @@ export const EXPORT_FORMAT_VERSION = 1;
 export type ExportData = {
   loops: Loop[];
   dailyCloses: { id: string; day: string; resolvedCount: number; createdAt: Date; updatedAt: Date }[];
+  weeklyReviews: {
+    id: string;
+    startedAt: Date;
+    completedAt: Date | null;
+    reviewedCount: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }[];
   settings: { key: string; value: string; updatedAt: Date }[];
 };
 
@@ -53,13 +61,13 @@ const SECTIONS: {
     state: 'next',
     heading: 'Next actions',
     line: (loop) => `${loop.nextAction} (${loop.title})`,
-    order: (a, b) => time(a.updatedAt) - time(b.updatedAt),
+    order: (a, b) => time(a.decidedAt) - time(b.decidedAt),
   },
   {
     state: 'waiting',
     heading: 'Waiting on someone',
     line: (loop) => `${loop.title}, waiting on ${loop.waitingOn}`,
-    order: (a, b) => time(a.updatedAt) - time(b.updatedAt),
+    order: (a, b) => time(a.decidedAt) - time(b.decidedAt),
   },
   {
     state: 'thinking',

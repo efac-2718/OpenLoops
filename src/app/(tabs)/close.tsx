@@ -13,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { closeDay, todayCloseQuery } from '@/db/closes';
 import { closeCandidatesQuery, type LoopRow } from '@/db/loops';
+import { lastFinishedReviewQuery, openReviewQuery, startReview } from '@/db/reviews';
 import { setSetting } from '@/db/settings';
 import { dayKey } from '@/domain/dates';
 import { attentionReason, type AttentionReason } from '@/domain/loop';
@@ -22,9 +23,11 @@ import {
   sameCloseTime,
   type CloseTime,
 } from '@/domain/reminder';
+import { isReviewDue, nextReviewDay } from '@/domain/review';
 import { useCloseTime } from '@/hooks/use-settings';
 import { setCloseReminder, type ReminderResult } from '@/services/close-reminder';
 import { formatDayInline } from '@/utils/describe-loop';
+import { timeAgo } from '@/utils/time-ago';
 import { loopCount, loopsNeed } from '@/utils/plural';
 
 // Most pressing first: things already late, then today's, then undecided, then rethinks.
@@ -92,9 +95,48 @@ export default function CloseScreen() {
             </ThemedView>
           )}
 
+          <WeeklyReviewCard />
           <ReminderSettings />
         </ScrollView>
       </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+function WeeklyReviewCard() {
+  const { data: open } = useLiveQuery(openReviewQuery());
+  const { data: finished } = useLiveQuery(lastFinishedReviewQuery());
+  const now = new Date();
+  const inProgress = open.length > 0;
+  const lastFinishedAt = finished[0]?.completedAt ?? null;
+  const due = isReviewDue(lastFinishedAt, now);
+
+  let text: string;
+  if (inProgress) {
+    text = 'You’re partway through a review. Pick up where you left off.';
+  } else if (!lastFinishedAt) {
+    text = 'Once a week, look through every open loop so the system stays trustworthy. About five minutes.';
+  } else if (due) {
+    text = `Your last review was ${timeAgo(lastFinishedAt, now)}. About five minutes.`;
+  } else {
+    text = `Last done ${timeAgo(lastFinishedAt, now)}. Next one ${formatDayInline(nextReviewDay(lastFinishedAt), now)}.`;
+  }
+
+  return (
+    <ThemedView type="backgroundElement" style={styles.card} testID="weekly-review-card">
+      <ThemedText type="smallBold">Weekly review</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {text}
+      </ThemedText>
+      <Button
+        testID="start-review"
+        label={inProgress ? 'Continue weekly review' : due ? 'Start weekly review' : 'Review now'}
+        variant={inProgress || due ? 'primary' : 'secondary'}
+        onPress={() => {
+          startReview(new Date());
+          router.push('/review');
+        }}
+      />
     </ThemedView>
   );
 }

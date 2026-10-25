@@ -36,7 +36,7 @@ export function closeDay(now: Date): Result<{ decidedToday: number }, 'loops_nee
       .from(loops)
       .where(
         and(
-          gte(loops.updatedAt, startOfDay(now)),
+          gte(loops.decidedAt, startOfDay(now)),
           ne(loops.state, 'inbox'),
           isNull(loops.deletedAt),
         ),

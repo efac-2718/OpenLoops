@@ -18,6 +18,8 @@ function loop(state: LoopState, fields: Partial<Loop> = {}): Loop {
     revisitAt: null,
     createdAt: day(20),
     updatedAt: day(20),
+    decidedAt: null,
+    reviewedAt: null,
     closedAt: null,
     deletedAt: null,
     ...fields,
@@ -94,6 +96,16 @@ describe('toJson', () => {
       dailyCloses: [
         { id: 'c1', day: '2026-10-24', resolvedCount: 3, createdAt: day(24), updatedAt: day(24) },
       ],
+      weeklyReviews: [
+        {
+          id: 'r1',
+          startedAt: day(25),
+          completedAt: day(25),
+          reviewedCount: 6,
+          createdAt: day(25),
+          updatedAt: day(25),
+        },
+      ],
       settings: [{ key: 'active_cap', value: '5', updatedAt: day(20) }],
     };
     const parsed = JSON.parse(toJson(data, now));
@@ -104,6 +116,7 @@ describe('toJson', () => {
       exportedAt: now.toISOString(),
       loops: [{ state: 'next', nextAction: 'Email Sam', createdAt: day(20).toISOString() }],
       dailyCloses: [{ day: '2026-10-24', resolvedCount: 3 }],
+      weeklyReviews: [{ id: 'r1', reviewedCount: 6, completedAt: day(25).toISOString() }],
       settings: [{ key: 'active_cap', value: '5' }],
     });
   });

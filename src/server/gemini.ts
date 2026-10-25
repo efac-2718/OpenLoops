@@ -19,8 +19,12 @@ import {
   type SuggestResult,
 } from './sort-prompt';
 
-/** Tried in order until one answers. */
-export const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'];
+/**
+ * Tried in order until one answers. Measured on 25 Oct 2026: the newest Flash
+ * (gemini-flash-latest) was overloaded every time, while Flash-Lite answered in
+ * under a second; gemini-2.5-flash is closed to new keys.
+ */
+export const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3.5-flash', 'gemini-flash-latest'];
 const ATTEMPT_TIMEOUT_MS = 25_000;
 // Ends a runaway answer (JSON mode can repeat itself) instead of letting it run for minutes.
 const MAX_OUTPUT_TOKENS = 8192;

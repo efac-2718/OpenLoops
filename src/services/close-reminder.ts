@@ -49,7 +49,9 @@ function loadNotifications(): Promise<LocalNotifications | null> {
       return null;
     }
     try {
-      const notifications = await import('./local-notifications');
+      // A plain require, loaded only here, after the native modules are known to exist.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const notifications: LocalNotifications = require('./local-notifications');
       notifications.setNotificationHandler({
         handleNotification: async () => ({
           shouldShowBanner: true,
@@ -59,7 +61,8 @@ function loadNotifications(): Promise<LocalNotifications | null> {
         }),
       });
       return notifications;
-    } catch {
+    } catch (error) {
+      console.warn('Open Loops: notifications could not be loaded.', error);
       return null;
     }
   })();
@@ -68,54 +71,75 @@ function loadNotifications(): Promise<LocalNotifications | null> {
 
 async function hasPermission(notifications: LocalNotifications): Promise<boolean> {
   if (Platform.OS === 'android') {
-    // Android 13+ only shows the permission prompt once a channel exists.
-    await notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: 'Nightly close',
-      importance: notifications.AndroidImportance.DEFAULT,
-    });
+    try {
+      // Android 13+ only shows the permission prompt once a channel exists.
+      await notifications.setNotificationChannelAsync(CHANNEL_ID, {
+        name: 'Nightly close',
+        importance: notifications.AndroidImportance.DEFAULT,
+      });
+    } catch {
+      // Expo Go on Android can refuse to create channels. Reminders then go to
+      // expo-notifications' fallback channel, which it creates itself.
+    }
   }
   const existing = await notifications.getPermissionsAsync();
   if (existing.granted) return true;
   return (await notifications.requestPermissionsAsync()).granted;
 }
 
-/** Replaces any existing reminder with one at `time`, or removes it when `time` is null. */
-export async function setCloseReminder(time: CloseTime | null): Promise<ReminderResult> {
+/**
+ * Runs a reminder action with notifications loaded. Any failure comes back as
+ * 'unavailable', never as an error, so a reminder can't break the screen.
+ */
+async function withNotifications(
+  action: (notifications: LocalNotifications) => Promise<ReminderResult>,
+): Promise<ReminderResult> {
   const notifications = await loadNotifications();
   if (!notifications) return 'unavailable';
+  try {
+    return await action(notifications);
+  } catch (error) {
+    console.warn('Open Loops: the reminder could not be scheduled.', error);
+    return 'unavailable';
+  }
+}
 
-  await notifications.cancelScheduledNotificationAsync(REMINDER_ID);
-  if (!time) return 'cancelled';
-  if (!(await hasPermission(notifications))) return 'denied';
+/** Replaces any existing reminder with one at `time`, or removes it when `time` is null. */
+export function setCloseReminder(time: CloseTime | null): Promise<ReminderResult> {
+  return withNotifications(async (notifications) => {
+    await notifications.cancelScheduledNotificationAsync(REMINDER_ID);
+    if (!time) return 'cancelled';
+    if (!(await hasPermission(notifications))) return 'denied';
 
-  await notifications.scheduleNotificationAsync({
-    identifier: REMINDER_ID,
-    content: CONTENT,
-    trigger: {
-      type: notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: time.hour,
-      minute: time.minute,
-      channelId: CHANNEL_ID,
-    },
+    await notifications.scheduleNotificationAsync({
+      identifier: REMINDER_ID,
+      content: CONTENT,
+      trigger: {
+        type: notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: time.hour,
+        minute: time.minute,
+        channelId: CHANNEL_ID,
+      },
+    });
+    return 'scheduled';
   });
-  return 'scheduled';
 }
 
 /** Sends the reminder once, a few seconds from now, to check that reminders arrive. */
-export async function sendTestReminder(): Promise<ReminderResult> {
-  const notifications = await loadNotifications();
-  if (!notifications) return 'unavailable';
-  if (!(await hasPermission(notifications))) return 'denied';
+export function sendTestReminder(): Promise<ReminderResult> {
+  return withNotifications(async (notifications) => {
+    if (!(await hasPermission(notifications))) return 'denied';
 
-  await notifications.scheduleNotificationAsync({
-    content: CONTENT,
-    trigger: {
-      type: notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: 5,
-      channelId: CHANNEL_ID,
-    },
+    await notifications.scheduleNotificationAsync({
+      content: CONTENT,
+      trigger: {
+        type: notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 5,
+        channelId: CHANNEL_ID,
+      },
+    });
+    return 'scheduled';
   });
-  return 'scheduled';
 }
 
 /** Opens the nightly close when the user taps the reminder. Use inside the navigator. */
@@ -138,6 +162,8 @@ export function useOpenCloseFromReminder() {
       subscription = notifications.addNotificationResponseReceivedListener((response) =>
         open(response.notification),
       );
+    }).catch((error) => {
+      console.warn('Open Loops: could not listen for reminder taps.', error);
     });
 
     return () => {

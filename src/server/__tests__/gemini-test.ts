@@ -3,32 +3,6 @@ import type { SortRequest } from '@/domain/ai-sort';
 import { suggestWithGemini } from '../gemini';
 import { SUGGESTIONS_SCHEMA, SYSTEM_PROMPT } from '../sort-prompt';
 
-const mockGenerateContent = jest.fn();
-
-jest.mock('@google/genai/web', () => {
-  class ApiError extends Error {
-    status: number;
-    constructor({ message, status }: { message: string; status: number }) {
-      super(message);
-      this.status = status;
-    }
-  }
-  class GoogleGenAI {
-    models = { generateContent: mockGenerateContent };
-  }
-  const FinishReason = {
-    STOP: 'STOP',
-    MAX_TOKENS: 'MAX_TOKENS',
-    SAFETY: 'SAFETY',
-    PROHIBITED_CONTENT: 'PROHIBITED_CONTENT',
-    BLOCKLIST: 'BLOCKLIST',
-    SPII: 'SPII',
-  };
-  return { ApiError, FinishReason, GoogleGenAI };
-});
-
-const { ApiError } = jest.requireMock('@google/genai/web');
-
 const request: SortRequest = {
   today: '2026-10-28',
   weekday: 'Wednesday',
@@ -41,68 +15,95 @@ const suggestions = [
   { id: 'a', decision: 'next', next_action: 'Call the bank', day: null, waiting_on: null, reason: 'Quick call.' },
 ];
 
-function reply(fields: Record<string, unknown> = {}) {
+function answer(fields: Record<string, unknown> = {}) {
   return {
-    text: JSON.stringify({ suggestions }),
-    candidates: [{ finishReason: 'STOP' }],
+    candidates: [
+      {
+        finishReason: 'STOP',
+        content: { parts: [{ text: 'Thinking it over', thought: true }, { text: JSON.stringify({ suggestions }) }] },
+      },
+    ],
     usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 200 },
     modelVersion: 'gemini-flash',
     ...fields,
   };
 }
 
+const mockFetch = jest.fn();
+const reply = (status: number, body: unknown) => mockFetch.mockResolvedValue({ status, json: async () => body });
+
 beforeEach(() => {
-  mockGenerateContent.mockReset();
+  mockFetch.mockReset();
+  global.fetch = mockFetch;
   jest.spyOn(console, 'info').mockImplementation(() => {});
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-test('asks Gemini Flash for JSON matching the suggestions schema', async () => {
-  mockGenerateContent.mockResolvedValue(reply());
+test('asks Gemini Flash for JSON matching the suggestions schema, and reads the answer', async () => {
+  reply(200, answer());
 
   await expect(suggestWithGemini(request, 'key')).resolves.toEqual({ ok: true, value: { suggestions } });
-  expect(mockGenerateContent).toHaveBeenCalledWith({
-    model: 'gemini-flash-latest',
-    contents: JSON.stringify(request),
-    config: {
-      systemInstruction: SYSTEM_PROMPT,
-      responseMimeType: 'application/json',
-      responseJsonSchema: SUGGESTIONS_SCHEMA,
-    },
+  const [url, init] = mockFetch.mock.calls[0];
+  expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent');
+  expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'x-goog-api-key': 'key' });
+  expect(JSON.parse(init.body)).toEqual({
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: JSON.stringify(request) }] }],
+    generationConfig: { responseMimeType: 'application/json', responseJsonSchema: SUGGESTIONS_SCHEMA },
   });
 });
 
 test('needs an API key', async () => {
   await expect(suggestWithGemini(request, undefined)).resolves.toEqual({ ok: false, error: 'not_configured' });
-  expect(mockGenerateContent).not.toHaveBeenCalled();
+  expect(mockFetch).not.toHaveBeenCalled();
 });
 
 test.each([
-  ['a safety stop', { candidates: [{ finishReason: 'SAFETY' }] }, 'refused'],
-  ['a blocked prompt', { candidates: [], promptFeedback: { blockReason: 'OTHER' } }, 'refused'],
-  ['running out of tokens', { candidates: [{ finishReason: 'MAX_TOKENS' }] }, 'failed'],
-  ['text that is not JSON', { text: 'Sure!' }, 'failed'],
-])('reports %s', async (_, fields, error) => {
-  mockGenerateContent.mockResolvedValue(reply(fields));
+  ['a safety stop', answer({ candidates: [{ finishReason: 'SAFETY' }] }), 'refused'],
+  ['a blocked prompt', answer({ candidates: [], promptFeedback: { blockReason: 'OTHER' } }), 'refused'],
+  ['running out of tokens', answer({ candidates: [{ finishReason: 'MAX_TOKENS' }] }), 'failed'],
+  ['text that is not JSON', answer({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'Sure!' }] } }] }), 'failed'],
+])('reports %s', async (_, body, error) => {
+  reply(200, body);
   await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
 });
 
-test('describes an unexpected failure, without the key', async () => {
-  mockGenerateContent.mockRejectedValue(new ApiError({ message: 'models/x is not found (key secret-key)', status: 404 }));
-  await expect(suggestWithGemini(request, 'secret-key')).resolves.toEqual({
+test.each([
+  ['a wrong key', 400, 'API key not valid. Please pass a valid API key.', 'not_configured'],
+  ['a rejected key', 403, 'Permission denied', 'not_configured'],
+  ['the free tier limit', 429, 'Resource has been exhausted', 'busy'],
+  ['a bad request', 400, 'Invalid JSON schema', 'failed'],
+  ['a server error', 503, 'The model is overloaded', 'failed'],
+])('reports %s', async (_, status, message, error) => {
+  reply(status, { error: { message } });
+  await expect(suggestWithGemini(request, 'key')).resolves.toEqual({
     ok: false,
-    error: 'failed',
-    detail: 'Gemini: Error: models/x is not found (key [key])',
+    error,
+    detail: `Gemini ${status}: ${message}`,
   });
 });
 
-test.each([
-  ['a wrong key', 400, '{"error":{"details":[{"reason":"API_KEY_INVALID"}]}}', 'not_configured'],
-  ['a rejected key', 403, 'Forbidden', 'not_configured'],
-  ['the free tier limit', 429, 'Too many requests', 'busy'],
-  ['a bad request', 400, 'Invalid schema', 'failed'],
-  ['any other failure', 500, 'Internal', 'failed'],
-])('reports %s', async (_, status, message, error) => {
-  mockGenerateContent.mockRejectedValue(new ApiError({ message, status }));
-  await expect(suggestWithGemini(request, 'key')).resolves.toMatchObject({ ok: false, error });
+test('gives up after 45 seconds instead of hanging', async () => {
+  jest.useFakeTimers();
+  mockFetch.mockImplementation(
+    (_url: string, init: { signal: AbortSignal }) =>
+      new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted')))),
+  );
+  const result = suggestWithGemini(request, 'key');
+  await jest.advanceTimersByTimeAsync(45_000);
+  await expect(result).resolves.toEqual({
+    ok: false,
+    error: 'busy',
+    detail: 'Gemini didn’t answer within 45 seconds.',
+  });
+  jest.useRealTimers();
+});
+
+test('describes a network failure, without the key', async () => {
+  mockFetch.mockRejectedValue(new TypeError('connection to key-123 failed'));
+  await expect(suggestWithGemini(request, 'key-123')).resolves.toEqual({
+    ok: false,
+    error: 'failed',
+    detail: 'Gemini: TypeError: connection to [key] failed',
+  });
 });
